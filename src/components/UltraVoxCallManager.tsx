@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Play, Square } from 'lucide-react';
-import { FlowData, UltraVoxCall, CallStatus } from '../types';
+import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, MapPin } from 'lucide-react';
+import { FlowData, CallStatus } from '../types';
 import { getUltraVoxService } from '../lib/ultravox';
 
 interface UltraVoxCallManagerProps {
@@ -24,9 +24,10 @@ export default function UltraVoxCallManager({
   const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentCall, setCurrentCall] = useState<UltraVoxCall | null>(null);
   const [transcripts, setTranscripts] = useState<string[]>([]);
   const [debugMessages, setDebugMessages] = useState<string[]>([]);
+  const [currentStageId, setCurrentStageId] = useState<string | null>(null);
+  const [stageHistory, setStageHistory] = useState<string[]>([]);
 
   const ultravoxServiceRef = useRef<ReturnType<typeof getUltraVoxService> | null>(null);
 
@@ -34,11 +35,19 @@ export default function UltraVoxCallManager({
   useEffect(() => {
     try {
       ultravoxServiceRef.current = getUltraVoxService(apiKey);
+      
+      // Set up stage change callback
+      ultravoxServiceRef.current.setStageChangeCallback((nodeId: string) => {
+        console.log('🔄 Stage changed to:', nodeId);
+        setCurrentStageId(nodeId);
+        setStageHistory(prev => [...prev, nodeId]);
+        onStageChange?.(nodeId);
+      });
     } catch (err) {
       setError('Failed to initialize UltraVox service');
       console.error('UltraVox initialization error:', err);
     }
-  }, [apiKey]);
+  }, [apiKey, onStageChange]);
 
   // Setup event listeners for session events
   useEffect(() => {
@@ -87,7 +96,7 @@ export default function UltraVoxCallManager({
 
     // Handle debug messages
     const handleDebugMessage = (event: Event) => {
-      const experimentalEvent = event as { message?: unknown }; // UltraVoxExperimentalMessageEvent
+      const experimentalEvent = event as { message?: unknown };
       const message = experimentalEvent.message || event;
       setDebugMessages(prev => [...prev.slice(-9), JSON.stringify(message)]);
     };
@@ -125,11 +134,10 @@ export default function UltraVoxCallManager({
         throw new Error('Flow must have a start node');
       }
 
-      // Create the call
-      console.log('📞 Creating UltraVox call...');
+      // Create the call with Call Stages support
+      console.log('📞 Creating UltraVox call with Call Stages...');
       const call = await ultravoxServiceRef.current.createCall(flowData);
       console.log('✅ Call created successfully:', call);
-      setCurrentCall(call);
 
       // Join the call using the SDK
       console.log('🔗 Joining call with SDK...');
@@ -139,6 +147,10 @@ export default function UltraVoxCallManager({
       setIsCallActive(true);
       setCallStatus('STATUS_ACTIVE');
       onCallStatusChange?.('STATUS_ACTIVE');
+      
+      // Set initial stage
+      setCurrentStageId(startNode.id);
+      setStageHistory([startNode.id]);
       onStageChange?.(startNode.id);
 
       // Initialize mute states from the session
@@ -148,7 +160,7 @@ export default function UltraVoxCallManager({
         setIsSpeakerMuted(currentSession.isSpeakerMuted);
       }
 
-      console.log('🎉 Call started successfully');
+      console.log('🎉 Call started successfully with Call Stages');
 
     } catch (err) {
       console.error('❌ Failed to start call:', err);
@@ -173,8 +185,6 @@ export default function UltraVoxCallManager({
     // Immediately update UI state to show ending
     setCallStatus('STATUS_ENDED');
     setIsCallActive(false);
-    setCurrentCall(null);
-    onCallStatusChange?.('STATUS_ENDED');
     
     setIsLoading(true);
     setError(null);
@@ -198,185 +208,209 @@ export default function UltraVoxCallManager({
       // Ensure UI state is clean regardless of any errors
       setCallStatus('STATUS_ENDED');
       setIsCallActive(false);
-      setCurrentCall(null);
-      setTranscripts([]);
-      setDebugMessages([]);
-      onCallStatusChange?.('STATUS_ENDED');
+      setCurrentStageId(null);
+      setStageHistory([]);
     }
   }, [onCallStatusChange]);
 
   const toggleMic = useCallback(() => {
-    const currentSession = ultravoxServiceRef.current?.getCurrentSession();
-    if (!currentSession) return;
+    const session = ultravoxServiceRef.current?.getCurrentSession();
+    if (!session) return;
 
     if (isMicMuted) {
-      currentSession.unmuteMic();
+      session.unmuteMic();
       setIsMicMuted(false);
-      console.log('🎤 Microphone unmuted');
     } else {
-      currentSession.muteMic();
+      session.muteMic();
       setIsMicMuted(true);
-      console.log('🎤 Microphone muted');
     }
   }, [isMicMuted]);
 
   const toggleSpeaker = useCallback(() => {
-    const currentSession = ultravoxServiceRef.current?.getCurrentSession();
-    if (!currentSession) return;
+    const session = ultravoxServiceRef.current?.getCurrentSession();
+    if (!session) return;
 
     if (isSpeakerMuted) {
-      currentSession.unmuteSpeaker();
+      session.unmuteSpeaker();
       setIsSpeakerMuted(false);
-      console.log('🔊 Speaker unmuted');
     } else {
-      currentSession.muteSpeaker();
+      session.muteSpeaker();
       setIsSpeakerMuted(true);
-      console.log('🔊 Speaker muted');
     }
   }, [isSpeakerMuted]);
 
-  // Status indicator color
+  const getCurrentNodeInfo = () => {
+    if (!currentStageId) return null;
+    return flowData.nodes.find(n => n.id === currentStageId);
+  };
+
   const getStatusColor = (status: CallStatus) => {
     switch (status) {
-      case 'STATUS_ACTIVE': return 'bg-green-500';
-      case 'STATUS_STARTING': return 'bg-yellow-500';
-      case 'STATUS_ENDED': return 'bg-gray-500';
-      case 'STATUS_FAILED': return 'bg-red-500';
-      default: return 'bg-gray-400';
+      case 'STATUS_STARTING': return 'text-yellow-600';
+      case 'STATUS_ACTIVE': return 'text-green-600';
+      case 'STATUS_ENDED': return 'text-gray-600';
+      case 'STATUS_FAILED': return 'text-red-600';
+      default: return 'text-gray-400';
     }
   };
 
   const getStatusText = (status: CallStatus) => {
     switch (status) {
-      case 'STATUS_ACTIVE': return 'Active';
       case 'STATUS_STARTING': return 'Starting...';
+      case 'STATUS_ACTIVE': return 'Active';
       case 'STATUS_ENDED': return 'Ended';
       case 'STATUS_FAILED': return 'Failed';
       default: return 'Unknown';
     }
   };
 
+  const currentNode = getCurrentNodeInfo();
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">UltraVox Call</h3>
-        <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${getStatusColor(callStatus)}`}></div>
-          <span className="text-sm text-gray-600">{getStatusText(callStatus)}</span>
+    <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-gray-900">UltraVox Call Manager</h3>
+        <div className="flex items-center space-x-2">
+          <div className={`w-2 h-2 rounded-full ${callStatus === 'STATUS_ACTIVE' ? 'bg-green-500' : 'bg-gray-300'}`} />
+          <span className={`text-sm font-medium ${getStatusColor(callStatus)}`}>
+            {getStatusText(callStatus)}
+          </span>
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-700 text-sm">{error}</p>
+      {/* Current Stage Indicator */}
+      {currentNode && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center space-x-2">
+            <MapPin className="w-4 h-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-900">Current Stage:</span>
+            <span className="text-sm text-blue-700">
+              {currentNode.data?.label || currentNode.type} ({currentNode.id})
+            </span>
+          </div>
+          {currentNode.data?.content && (
+            <p className="text-xs text-blue-600 mt-1">{currentNode.data.content}</p>
+          )}
         </div>
       )}
 
-      <div className="flex items-center gap-3 mb-4">
+      {/* Stage History */}
+      {stageHistory.length > 1 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Stage History:</h4>
+          <div className="flex flex-wrap gap-1">
+            {stageHistory.map((stageId, index) => {
+              const node = flowData.nodes.find(n => n.id === stageId);
+              return (
+                <span
+                  key={`${stageId}-${index}`}
+                  className={`px-2 py-1 text-xs rounded ${
+                    index === stageHistory.length - 1
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {node?.data?.label || node?.type || stageId}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Call Controls */}
+      <div className="flex items-center justify-center space-x-4">
         {!isCallActive ? (
           <button
             onClick={startCall}
             disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white rounded-md transition-colors"
+            className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
           >
             {isLoading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Starting...</span>
+              </>
             ) : (
-              <Phone className="w-4 h-4" />
+              <>
+                <Phone className="w-4 h-4" />
+                <span>Start Call</span>
+              </>
             )}
-            {isLoading ? 'Starting...' : 'Start Call'}
           </button>
         ) : (
           <>
             <button
-              onClick={endCall}
-              disabled={isLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-md transition-colors"
+              onClick={toggleMic}
+              className={`p-3 rounded-lg transition-colors ${
+                isMicMuted
+                  ? 'bg-red-100 hover:bg-red-200 text-red-600'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+              }`}
+              title={isMicMuted ? 'Unmute Microphone' : 'Mute Microphone'}
             >
-              {isLoading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <PhoneOff className="w-4 h-4" />
-              )}
-              {isLoading ? 'Ending...' : 'End Call'}
+              {isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={toggleMic}
-                className={`p-2 rounded-md transition-colors ${
-                  isMicMuted 
-                    ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-                title={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
-              >
-                {isMicMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
+            <button
+              onClick={toggleSpeaker}
+              className={`p-3 rounded-lg transition-colors ${
+                isSpeakerMuted
+                  ? 'bg-red-100 hover:bg-red-200 text-red-600'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-600'
+              }`}
+              title={isSpeakerMuted ? 'Unmute Speaker' : 'Mute Speaker'}
+            >
+              {isSpeakerMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+            </button>
 
-              <button
-                onClick={toggleSpeaker}
-                className={`p-2 rounded-md transition-colors ${
-                  isSpeakerMuted 
-                    ? 'bg-red-100 text-red-600 hover:bg-red-200' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-                title={isSpeakerMuted ? 'Unmute speaker' : 'Mute speaker'}
-              >
-                {isSpeakerMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              </button>
-            </div>
+            <button
+              onClick={endCall}
+              disabled={isLoading}
+              className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              <PhoneOff className="w-4 h-4" />
+              <span>End Call</span>
+            </button>
           </>
         )}
       </div>
 
-      {currentCall && (
-        <div className="space-y-3">
-          <div className="text-sm text-gray-600">
-            <p><strong>Call ID:</strong> {currentCall.id}</p>
-            <p><strong>Model:</strong> {currentCall.model}</p>
-            <p><strong>Voice:</strong> {currentCall.voice}</p>
-            {currentCall.metadata && (
-              <p><strong>Flow ID:</strong> {String(currentCall.metadata.flowId || 'N/A')}</p>
-            )}
+      {/* Transcripts */}
+      {transcripts.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Conversation:</h4>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {transcripts.map((transcript, index) => (
+              <p key={index} className="text-xs text-gray-600">
+                {transcript}
+              </p>
+            ))}
           </div>
-
-          {transcripts.length > 0 && (
-            <div className="border-t pt-3">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Live Transcripts</h4>
-              <div className="max-h-32 overflow-y-auto space-y-1">
-                {transcripts.map((transcript, index) => (
-                  <p key={index} className="text-xs text-gray-600 p-2 bg-gray-50 rounded">
-                    {transcript}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {debugMessages.length > 0 && (
-            <div className="border-t pt-3">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Debug Messages</h4>
-              <div className="max-h-32 overflow-y-auto space-y-1">
-                {debugMessages.map((message, index) => (
-                  <p key={index} className="text-xs font-mono text-gray-500 p-2 bg-gray-50 rounded">
-                    {message}
-                  </p>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      <div className="mt-4 pt-3 border-t border-gray-200">
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <Play className="w-3 h-3" />
-          <span>Flow nodes: {flowData.nodes.length}</span>
-          <Square className="w-3 h-3" />
-          <span>Edges: {flowData.edges.length}</span>
-        </div>
-      </div>
+      {/* Debug Messages */}
+      {debugMessages.length > 0 && (
+        <details className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <summary className="text-sm font-medium text-gray-700 cursor-pointer">
+            Debug Messages ({debugMessages.length})
+          </summary>
+          <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+            {debugMessages.map((message, index) => (
+              <p key={index} className="text-xs text-gray-500 font-mono">
+                {message}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 } 

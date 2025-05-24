@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "update-ngrok": "./scripts/update-ngrok-url.sh",
+    "dev:help": "echo 'For UltraVox development: 1) Run ngrok http 3000 in another terminal, 2) Run npm run update-ngrok, 3) Restart this server'"
   },
   "dependencies": {
     "dot-env": "^0.0.1",

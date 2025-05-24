@@ -3,7 +3,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactFlow, {
   Node,
-  Edge,
   addEdge,
   useNodesState,
   useEdgesState,
@@ -25,6 +24,7 @@ import MessageNode from './nodes/MessageNode';
 import QuestionNode from './nodes/QuestionNode';
 import ConditionNode from './nodes/ConditionNode';
 import { FlowNode, FlowData, NodeType, NodeData, CallStatus } from '../types';
+import { useFlowContext, useCallStages } from '../lib/flow-context';
 
 const nodeTypes: NodeTypes = {
   start: StartNode,
@@ -49,10 +49,12 @@ const FlowBuilder: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [showUltraVoxPanel, setShowUltraVoxPanel] = useState(false);
-  const [callStatus, setCallStatus] = useState<CallStatus>('STATUS_UNSPECIFIED');
-  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  // Use Flow Context
+  const { setFlowData } = useFlowContext();
+  const { currentStageId, callStatus, transitionToStage, setCallStatus, setCallActive } = useCallStages();
 
   // UltraVox API key (in production, this should come from environment variables)
   const ultravoxApiKey = process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY || '';
@@ -69,12 +71,37 @@ const FlowBuilder: React.FC = () => {
         if (flowData.nodes && flowData.edges) {
           setNodes(flowData.nodes);
           setEdges(flowData.edges);
+          setFlowData(flowData);
         }
       } catch (error) {
         console.error('Error loading saved flow:', error);
       }
     }
-  }, [setNodes, setEdges]);
+  }, [setNodes, setEdges, setFlowData]);
+
+  // Update flow data in context when nodes or edges change
+  useEffect(() => {
+    const flowData: FlowData = {
+      nodes: nodes as FlowNode[],
+      edges: edges,
+    };
+    setFlowData(flowData);
+  }, [nodes, edges, setFlowData]);
+
+  // Update node styles based on current stage
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        style: {
+          ...node.style,
+          border: node.id === currentStageId ? '3px solid #3b82f6' : '1px solid #d1d5db',
+          boxShadow: node.id === currentStageId ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : undefined,
+          backgroundColor: node.id === currentStageId ? '#eff6ff' : undefined,
+        },
+      }))
+    );
+  }, [currentStageId, setNodes]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -153,7 +180,7 @@ const FlowBuilder: React.FC = () => {
   const saveFlow = useCallback(() => {
     const flowData: FlowData = {
       nodes: nodes as FlowNode[],
-      edges: edges as Edge[],
+      edges: edges,
     };
     localStorage.setItem('conversation-flow', JSON.stringify(flowData));
     alert('Flow saved successfully!');
@@ -190,6 +217,19 @@ const FlowBuilder: React.FC = () => {
     }
   }, [reactFlowInstance]);
 
+  // Handle stage changes from UltraVox
+  const handleStageChange = useCallback((nodeId: string) => {
+    console.log('🔄 FlowBuilder: Stage changed to:', nodeId);
+    transitionToStage(nodeId);
+  }, [transitionToStage]);
+
+  // Handle call status changes
+  const handleCallStatusChange = useCallback((status: CallStatus) => {
+    console.log('📊 FlowBuilder: Call status changed to:', status);
+    setCallStatus(status);
+    setCallActive(status === 'STATUS_ACTIVE');
+  }, [setCallStatus, setCallActive]);
+
   return (
     <div className="flex h-screen bg-gray-100">
       <NodeSidebar onDragStart={onDragStart} />
@@ -199,136 +239,123 @@ const FlowBuilder: React.FC = () => {
         <div className="absolute top-4 left-4 z-10 flex gap-2">
           <button
             onClick={saveFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg shadow-md hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            title="Save Flow"
           >
             <Save className="w-4 h-4" />
             Save
           </button>
+          
           <button
             onClick={exportFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            title="Export Flow"
           >
             <Download className="w-4 h-4" />
             Export
           </button>
+          
           <button
             onClick={resetView}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-lg shadow-md hover:bg-gray-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            title="Reset View"
           >
             <RotateCcw className="w-4 h-4" />
             Reset View
           </button>
+          
           <button
             onClick={clearFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg shadow-md hover:bg-red-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            title="Clear Flow"
           >
             <Trash2 className="w-4 h-4" />
             Clear
           </button>
+        </div>
+
+        {/* UltraVox Panel Toggle */}
+        <div className="absolute top-4 right-4 z-10">
           <button
             onClick={() => setShowUltraVoxPanel(!showUltraVoxPanel)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-md transition-colors ${
-              showUltraVoxPanel 
-                ? 'bg-purple-700 text-white' 
-                : 'bg-purple-600 text-white hover:bg-purple-700'
+            className={`px-4 py-2 rounded-md transition-colors ${
+              showUltraVoxPanel
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
             }`}
           >
-            🎤 UltraVox
+            {showUltraVoxPanel ? 'Hide' : 'Show'} Call Manager
           </button>
         </div>
 
-        {/* UltraVox Panel */}
-        {showUltraVoxPanel && (
-          <div className="absolute top-20 left-4 z-10 w-80">
-            {!isApiKeyConfigured ? (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">UltraVox Setup Required</h3>
-                </div>
-                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                  <p className="text-yellow-700 text-sm">
-                    <strong>API Key Missing:</strong> Please configure your UltraVox API key to use voice features.
-                  </p>
-                </div>
-                <div className="space-y-3 text-sm text-gray-600">
-                  <div>
-                    <strong>Steps to fix:</strong>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-xs">
-                    <li>Create a <code>.env.local</code> file in your project root</li>
-                    <li>Add: <code>NEXT_PUBLIC_ULTRAVOX_API_KEY=your_key_here</code></li>
-                    <li>Add: <code>ULTRAVOX_API_KEY=your_key_here</code></li>
-                    <li>Restart the development server</li>
-                  </ol>
-                  <div className="pt-2 text-xs">
-                    <strong>Get your API key:</strong><br />
-                    1. Sign up at <a href="https://ultravox.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ultravox.ai</a><br />
-                    2. Navigate to your dashboard<br />
-                    3. Generate an API key
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <UltraVoxCallManager
-                flowData={{ nodes: nodes as FlowNode[], edges }}
-                apiKey={ultravoxApiKey}
-                onCallStatusChange={setCallStatus}
-                onStageChange={setCurrentNodeId}
-              />
-            )}
-          </div>
-        )}
-
         {/* Current Stage Indicator */}
-        {currentNodeId && callStatus === 'STATUS_ACTIVE' && (
-          <div className="absolute bottom-4 left-4 z-10 bg-purple-600 text-white px-3 py-2 rounded-lg shadow-md">
-            <div className="text-xs opacity-75">Current Node:</div>
-            <div className="font-medium">{currentNodeId}</div>
+        {currentStageId && (
+          <div className="absolute top-16 right-4 z-10 bg-blue-100 border border-blue-300 rounded-lg px-3 py-2">
+            <div className="text-sm font-medium text-blue-900">
+              Active Stage: {currentStageId}
+            </div>
+            <div className="text-xs text-blue-700">
+              Status: {callStatus.replace('STATUS_', '')}
+            </div>
           </div>
         )}
 
-        <div className="w-full h-full" ref={reactFlowWrapper}>
+        <div
+          ref={reactFlowWrapper}
+          className="w-full h-full"
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
-            onInit={setReactFlowInstance}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
+            onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
-            snapToGrid
-            snapGrid={[15, 15]}
             attributionPosition="bottom-left"
           >
+            <Background />
             <Controls />
-            <Background color="#aaa" gap={16} />
           </ReactFlow>
         </div>
       </div>
 
-      {showConfigPanel && (
-        <>
-          {/* Mobile backdrop */}
-          <div 
-            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
-            onClick={() => setShowConfigPanel(false)}
-          />
-          
-          {/* ConfigPanel */}
-          <div className="fixed md:relative top-0 right-0 md:top-auto md:right-auto z-50 md:z-auto h-full md:h-auto">
-            <ConfigPanel
-              selectedNode={selectedNode}
-              nodes={nodes as FlowNode[]}
-              onNodeUpdate={onNodeUpdate}
-              onClose={() => setShowConfigPanel(false)}
+      {/* Configuration Panel */}
+      {showConfigPanel && selectedNode && (
+        <ConfigPanel
+          selectedNode={selectedNode}
+          nodes={nodes as FlowNode[]}
+          onNodeUpdate={onNodeUpdate}
+          onClose={() => setShowConfigPanel(false)}
+        />
+      )}
+
+      {/* UltraVox Call Manager Panel */}
+      {showUltraVoxPanel && (
+        <div className="absolute top-20 right-4 z-20 w-96">
+          {isApiKeyConfigured ? (
+            <UltraVoxCallManager
+              flowData={{ nodes: nodes as FlowNode[], edges }}
+              apiKey={ultravoxApiKey}
+              onCallStatusChange={handleCallStatusChange}
+              onStageChange={handleStageChange}
             />
-          </div>
-        </>
+          ) : (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h3 className="text-lg font-semibold text-yellow-800 mb-2">
+                UltraVox API Key Required
+              </h3>
+              <p className="text-sm text-yellow-700">
+                Please set your NEXT_PUBLIC_ULTRAVOX_API_KEY environment variable to use the call manager.
+              </p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

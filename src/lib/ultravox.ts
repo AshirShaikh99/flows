@@ -46,17 +46,38 @@ export class UltraVoxFlowService {
   private apiKey: string;
   private currentSession: UltravoxSession | null = null;
   private executionContext: FlowExecutionContext | null = null;
+  private stageChangeCallback?: (nodeId: string) => void;
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
   }
 
   /**
-   * Create a new UltraVox call for the flow
-   * This now uses the server-side API route to avoid CORS issues
+   * Set callback for stage changes to update UI
+   */
+  setStageChangeCallback(callback: (nodeId: string) => void): void {
+    this.stageChangeCallback = callback;
+  }
+
+  /**
+   * Create a new UltraVox call for the flow with Call Stages support
    */
   async createCall(flowData: FlowData, startNodeId?: string): Promise<UltraVoxCall> {
-    console.log('🔄 Starting UltraVox call creation...');
+    console.log('🔄 Starting UltraVox call creation with Call Stages...');
+    
+    // Validate that BASE_URL is HTTPS (required by UltraVox)
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    if (!baseUrl.startsWith('https://')) {
+      throw new Error(
+        `UltraVox requires HTTPS for tool endpoints. Current BASE_URL: ${baseUrl}\n\n` +
+        `To fix this:\n` +
+        `1. Install ngrok: brew install ngrok/ngrok/ngrok\n` +
+        `2. Start ngrok: ngrok http 3000\n` +
+        `3. Update NEXT_PUBLIC_BASE_URL in .env.local with your ngrok HTTPS URL\n` +
+        `4. Restart your development server\n\n` +
+        `See NGROK_SETUP.md for detailed instructions.`
+      );
+    }
     
     const startNode = startNodeId 
       ? flowData.nodes.find(n => n.id === startNodeId)
@@ -66,10 +87,11 @@ export class UltraVoxFlowService {
       throw new Error('No start node found in flow');
     }
 
-    // Generate initial system prompt based on the start node
+    // Generate initial system prompt and tools for the start node
     const systemPrompt = this.generateSystemPromptForNode(startNode);
+    const selectedTools = this.generateToolsForNode(startNode, flowData);
     
-    // Create call config matching the working voice-flow-builder format
+    // Create call config with Call Stages support
     const callConfig = {
       systemPrompt: systemPrompt,
       model: 'fixie-ai/ultravox-70B',
@@ -79,16 +101,17 @@ export class UltraVoxFlowService {
       initialOutputMedium: 'MESSAGE_MEDIUM_VOICE',
       maxDuration: '1800s',
       recordingEnabled: true,
+      selectedTools: selectedTools,
       metadata: {
         flowId: `flow_${Date.now()}`,
         startNodeId: startNode.id,
-        nodeType: startNode.type
+        nodeType: startNode.type,
+        hasCallStages: 'true'
       }
     };
 
-    console.log('📞 Creating Ultravox call with config:', callConfig);
+    console.log('📞 Creating Ultravox call with Call Stages config:', callConfig);
 
-    // Call our server-side API route (matching working pattern)
     try {
       const response = await fetch('/api/ultravox/calls', {
         method: 'POST',
@@ -117,28 +140,22 @@ export class UltraVoxFlowService {
       console.log('🔗 JoinUrl received:', call.joinUrl);
 
       // Validate the response has required fields
-      if (!call) {
-        throw new Error('API returned null/undefined call object');
-      }
-
-      if (!call.joinUrl) {
-        console.error('❌ Missing joinUrl in response:', call);
-        throw new Error('API response missing required joinUrl field');
+      if (!call || !call.joinUrl) {
+        throw new Error('API response missing required fields');
       }
 
       if (!call.joinUrl.startsWith('wss://')) {
-        console.error('❌ Invalid joinUrl format:', call.joinUrl);
         throw new Error(`Invalid joinUrl format: ${call.joinUrl}`);
       }
 
-      console.log('✅ Valid call object created with joinUrl:', call.joinUrl);
+      console.log('✅ Valid call object created with Call Stages support');
 
       // Initialize execution context
       this.executionContext = {
         flowData,
         currentNodeId: startNode.id,
         variables: {},
-        callStageHistory: [],
+        callStageHistory: [startNode.id],
         ultravoxCall: call
       };
 
@@ -154,25 +171,14 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Join a call using the UltraVox SDK - simplified approach
+   * Join a call using the UltraVox SDK with Call Stages support
    */
   async joinCall(joinUrl: string): Promise<void> {
-    console.log('🔊 Attempting to join call with URL:', joinUrl);
+    console.log('🔊 Attempting to join call with Call Stages support:', joinUrl);
     
-    // Validate joinUrl before proceeding
-    if (!joinUrl) {
-      console.error('❌ Join URL is null or undefined');
-      throw new Error('Join URL is required but was not provided');
-    }
-    
-    if (typeof joinUrl !== 'string') {
-      console.error('❌ Join URL is not a string:', typeof joinUrl, joinUrl);
-      throw new Error(`Join URL must be a string, got ${typeof joinUrl}`);
-    }
-    
-    if (!joinUrl.startsWith('wss://')) {
-      console.error('❌ Invalid join URL format:', joinUrl);
-      throw new Error(`Invalid join URL format: ${joinUrl}. Must start with wss://`);
+    // Validate joinUrl
+    if (!joinUrl || typeof joinUrl !== 'string' || !joinUrl.startsWith('wss://')) {
+      throw new Error(`Invalid join URL format: ${joinUrl}`);
     }
 
     // Clean up any existing session
@@ -185,56 +191,27 @@ export class UltraVoxFlowService {
       }
     }
 
-    console.log('🎤 Creating new UltraVox session...');
+    console.log('🎤 Creating new UltraVox session with Call Stages...');
     try {
-      // Use dynamic import like working voice-flow-builder
       const UltravoxSessionClass = await getUltravoxSession();
       this.currentSession = new UltravoxSessionClass();
       console.log('✅ UltraVox session created successfully');
 
-      // Setup essential event listeners BEFORE joining
+      // Setup event listeners BEFORE joining
       this.setupSessionEventListeners();
 
-      // Register flow navigation tools
-      this.registerFlowTools();
+      // Register Call Stages tools
+      this.registerCallStageTools();
 
-      console.log('🌐 Joining call with validated URL:', joinUrl);
-      console.log('📊 Session state before join:', {
-        hasSession: !!this.currentSession,
-        sessionType: this.currentSession?.constructor?.name
-      });
-
-      // Join the WebSocket connection
+      // Join the call
+      console.log('🔗 Joining call...');
       await this.currentSession.joinCall(joinUrl);
-      console.log('✅ Successfully joined UltraVox call');
-      
-      // Wait a moment for connection to stabilize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('📊 Session state after join:', {
-        status: this.currentSession?.status,
-        hasTranscripts: !!this.currentSession?.transcripts,
-        isSpeakerMuted: this.currentSession?.isSpeakerMuted,
-        isMicMuted: this.currentSession?.isMicMuted
-      });
-      
+      console.log('✅ Successfully joined call with Call Stages support');
+
     } catch (error) {
-      console.error('❌ Failed to join UltraVox call:', error);
-      console.error('🔍 Error type:', typeof error);
-      console.error('📝 Error message:', error instanceof Error ? error.message : String(error));
-      console.error('📝 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
-      
-      // Clean up failed session
-      if (this.currentSession) {
-        try {
-          await this.currentSession.leaveCall();
-        } catch (cleanupError) {
-          console.warn('⚠️ Error during cleanup:', cleanupError);
-        }
-        this.currentSession = null;
-      }
-      
-      throw new Error(`WebSocket connection failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error('❌ Failed to join call:', error);
+      this.currentSession = null;
+      throw error;
     }
   }
 
@@ -254,22 +231,23 @@ export class UltraVoxFlowService {
       throw new Error(`Target node ${transition.toNodeId} not found`);
     }
 
-    // Create new stage configuration
-    const stageConfig = this.createStageConfigForNode(targetNode);
-    
-    // Send stage transition request via server-side API
-    const response = await this.sendStageTransition(stageConfig, transition);
+    console.log(`🔄 Transitioning to stage: ${transition.toNodeId} (${targetNode.type})`);
 
-    if (response.ok) {
-      // Update execution context
-      this.executionContext.currentNodeId = transition.toNodeId;
-      this.executionContext.callStageHistory.push(transition.toNodeId);
+    // Update execution context
+    this.executionContext.currentNodeId = transition.toNodeId;
+    this.executionContext.callStageHistory.push(transition.toNodeId);
 
-      // Store any transition data in variables
-      if (transition.data) {
-        Object.assign(this.executionContext.variables, transition.data);
-      }
+    // Store any transition data in variables
+    if (transition.data) {
+      Object.assign(this.executionContext.variables, transition.data);
     }
+
+    // Notify UI of stage change
+    if (this.stageChangeCallback) {
+      this.stageChangeCallback(transition.toNodeId);
+    }
+
+    console.log(`✅ Successfully transitioned to node: ${transition.toNodeId}`);
   }
 
   /**
@@ -335,7 +313,6 @@ export class UltraVoxFlowService {
       try {
         console.log('📤 Leaving UltraVox session...');
         
-        // Set a timeout for the leaveCall operation
         const leaveCallPromise = this.currentSession.leaveCall();
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Leave call timeout')), 5000)
@@ -346,9 +323,7 @@ export class UltraVoxFlowService {
         
       } catch (error) {
         console.warn('⚠️ Error while leaving call (forcing cleanup):', error);
-        // Force cleanup even if leaveCall fails
       } finally {
-        // Always clean up the session reference
         this.currentSession = null;
         console.log('🧹 Session reference cleared');
       }
@@ -388,11 +363,11 @@ Node ID: ${node.id}
 CUSTOM INSTRUCTIONS:
 ${node.data.customPrompt}
 
-If you need to move to the next step in the conversation, use the 'navigateFlow' tool.`;
+You have access to a 'changeStage' tool to transition to the next step in the conversation flow.`;
       return customPromptBase;
     }
 
-    // Default prompt generation (existing logic)
+    // Default prompt generation
     const basePrompt = `You are an AI assistant helping users navigate through a conversational flow.
     
 Current node: ${node.type}
@@ -405,14 +380,14 @@ Node ID: ${node.id}
         
 You are starting a new conversation. ${node.data.content || 'Welcome! How can I help you today?'}
 
-If you need to move to the next step in the conversation, use the 'navigateFlow' tool.`;
+Use the 'changeStage' tool when you need to move to the next step in the conversation.`;
 
       case 'message':
         return `${basePrompt}
         
 Deliver this message to the user: "${node.data.content || node.data.label}"
 
-After delivering the message, use the 'navigateFlow' tool to move to the next step.`;
+After delivering the message, use the 'changeStage' tool to move to the next step.`;
 
       case 'question':
         const options = node.data.options?.map(opt => opt.text).join(', ') || '';
@@ -421,7 +396,7 @@ After delivering the message, use the 'navigateFlow' tool to move to the next st
 Ask the user this question: "${node.data.question || node.data.content}"
 ${options ? `Available options: ${options}` : ''}
 
-When you receive their response, use the 'navigateFlow' tool with their answer to proceed.`;
+When you receive their response, use the 'changeStage' tool with their answer to proceed.`;
 
       case 'condition':
         return `${basePrompt}
@@ -436,54 +411,71 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     }
   }
 
-  private generateToolsForNode(node: FlowNode): SelectedTool[] {
-    const tools: SelectedTool[] = [];
-
-    // Add navigation tool for all nodes
-    tools.push({
-      temporaryTool: {
-        modelToolName: 'navigateFlow',
-        description: 'Navigate to the next node in the conversational flow',
-        dynamicParameters: [
-          {
-            name: 'nodeId',
-            location: 'PARAMETER_LOCATION_BODY',
-            schema: {
-              type: 'string',
-              description: 'The ID of the next node to navigate to'
+  private generateToolsForNode(node: FlowNode, flowData: FlowData): SelectedTool[] {
+    const tools: SelectedTool[] = [
+      {
+        temporaryTool: {
+          modelToolName: 'changeStage',
+          description: 'Transition to a new stage in the conversation flow',
+          dynamicParameters: [
+            {
+              name: 'nodeId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The ID of the target node to transition to'
+              },
+              required: true
             },
-            required: true
-          },
-          {
-            name: 'userResponse',
-            location: 'PARAMETER_LOCATION_BODY',
-            schema: {
-              type: 'string',
-              description: 'The user response that triggered this navigation'
+            {
+              name: 'userResponse',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The user\'s response that triggered this transition'
+              },
+              required: false
             },
-            required: false
+            {
+              name: 'callId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The call ID for this conversation'
+              },
+              required: false
+            },
+            {
+              name: 'flowData',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'object',
+                description: `The complete flow data including ${flowData.nodes.length} nodes and ${flowData.edges.length} edges`
+              },
+              required: false
+            }
+          ],
+          http: {
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/stage-change`,
+            httpMethod: 'POST'
           }
-        ],
-        http: {
-          baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/navigate`,
-          httpMethod: 'POST'
         }
       }
-    });
+    ];
 
     // Add condition evaluation tool for condition nodes
     if (node.type === 'condition') {
       tools.push({
         temporaryTool: {
           modelToolName: 'evaluateCondition',
-          description: 'Evaluate a condition and determine the next flow step',
+          description: 'Evaluate a condition against user input',
           dynamicParameters: [
             {
               name: 'userInput',
               location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
-                description: 'The user input to evaluate against the condition'
+                description: 'The user input to evaluate'
               },
               required: true
             },
@@ -492,7 +484,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
               location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
-                description: 'The expected value for the condition'
+                description: 'The value to compare against'
               },
               required: true
             },
@@ -501,14 +493,13 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
               location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
-                enum: ['equals', 'contains'],
                 description: 'The comparison operator'
               },
               required: true
             }
           ],
           http: {
-            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/evaluate`,
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/evaluate-condition`,
             httpMethod: 'POST'
           }
         }
@@ -518,43 +509,25 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     return tools;
   }
 
-  private createStageConfigForNode(node: FlowNode): Partial<UltraVoxCallStage> {
-    return {
-      systemPrompt: this.generateSystemPromptForNode(node),
-      model: 'fixie-ai/ultravox',
-      voice: 'Mark',
-      temperature: 0.7,
-      initialState: {
-        nodeId: node.id,
-        nodeType: node.type,
-        variables: this.executionContext!.variables
-      }
-    };
-  }
-
-  private async sendStageTransition(
-    stageConfig: Partial<UltraVoxCallStage>,
-    transition: StageTransition
-  ): Promise<Response> {
-    // Mark parameters as used for future implementation
-    void stageConfig;
-    void transition;
-    
-    // This would be called from within a tool handler
-    // For now, we'll return a mock response
-    return new Response(JSON.stringify({ success: true }), { 
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  private registerFlowTools(): void {
+  private registerCallStageTools(): void {
     if (!this.currentSession) return;
 
-    // Register navigation tool
-    this.currentSession.registerToolImplementation('navigateFlow', async (parameters) => {
-      const { nodeId, userResponse } = parameters as { nodeId: string; userResponse?: string };
+    console.log('🔧 Registering Call Stages tools...');
+
+    // Register stage change tool - this will be called by the agent
+    this.currentSession.registerToolImplementation('changeStage', async (parameters) => {
+      const { nodeId, userResponse, callId } = parameters as { 
+        nodeId: string; 
+        userResponse?: string;
+        callId?: string;
+      };
       
+      console.log('🔄 changeStage tool called:', { nodeId, userResponse, callId });
+
+      if (!this.executionContext) {
+        throw new Error('No execution context available');
+      }
+
       const transition: StageTransition = {
         toNodeId: nodeId,
         trigger: 'tool_call',
@@ -572,6 +545,8 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
         conditionValue: string;
         operator: 'equals' | 'contains';
       };
+
+      console.log('🔍 evaluateCondition tool called:', { userInput, conditionValue, operator });
 
       let conditionMet = false;
 
@@ -618,45 +593,22 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
 
       return `Condition ${conditionMet ? 'met' : 'not met'}. User input: "${userInput}" ${operator} "${conditionValue}"`;
     });
+
+    console.log('✅ Call Stages tools registered successfully');
   }
 
   private setupSessionEventListeners(): void {
     if (!this.currentSession) return;
 
-    console.log('🎧 Setting up essential UltraVox session event listeners...');
+    console.log('🎧 Setting up Call Stages session event listeners...');
 
     // Core session events
     this.currentSession.addEventListener('status', (event) => {
       console.log('📡 Session status changed:', this.currentSession?.status, event);
-      
-      // Log when agent starts speaking
-      if (this.currentSession?.status === 'speaking') {
-        console.log('🗣️ Agent is speaking - checking audio setup...');
-        console.log('🔊 Speaker muted:', this.currentSession?.isSpeakerMuted);
-        console.log('🎤 Mic muted:', this.currentSession?.isMicMuted);
-      }
     });
 
     this.currentSession.addEventListener('transcripts', (event) => {
       console.log('📝 Transcripts updated:', this.currentSession?.transcripts, event);
-    });
-
-    // Audio-specific events to debug
-    this.currentSession.addEventListener('audio', (event) => {
-      console.log('🔊 Audio event:', event);
-    });
-
-    this.currentSession.addEventListener('speaking', (event) => {
-      console.log('🗣️ Speaking event:', event);
-    });
-
-    this.currentSession.addEventListener('output', (event) => {
-      console.log('📤 Output event:', event);
-    });
-
-    // Connection events
-    this.currentSession.addEventListener('connect', (event) => {
-      console.log('🔗 Connection established:', event);
     });
 
     // Error handling
@@ -664,7 +616,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
       console.error('❌ UltraVox session error:', event);
     });
 
-    // WebSocket connection events
+    // Connection events
     this.currentSession.addEventListener('disconnect', (event) => {
       console.warn('🔌 Session disconnected:', event);
     });
@@ -673,10 +625,8 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
       console.log('🔄 Session reconnected:', event);
     });
 
-    console.log('✅ Enhanced event listeners configured successfully');
+    console.log('✅ Call Stages event listeners configured successfully');
   }
-
-  // Audio methods removed - UltraVox SDK handles audio internally
 }
 
 // Singleton instance
