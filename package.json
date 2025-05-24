@@ -13,7 +13,8 @@
     "next": "15.1.8",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "ultravox-client": "^0.3.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

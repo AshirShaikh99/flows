@@ -1,6 +1,6 @@
-# Conversation Flow Builder
+# Conversation Flow Builder with UltraVox Integration
 
-A visual conversation flow builder built with React, ReactFlow, and Next.js that allows users to create interactive conversation flows with branching logic.
+A visual conversation flow builder built with React, ReactFlow, and Next.js that allows users to create interactive conversation flows with branching logic. Now integrated with UltraVox SDK for voice-enabled conversational AI calls.
 
 ![Flow Builder Demo](https://via.placeholder.com/800x400/f3f4f6/374151?text=Conversation+Flow+Builder)
 
@@ -13,6 +13,9 @@ A visual conversation flow builder built with React, ReactFlow, and Next.js that
 - **Configuration Panel**: Easy-to-use forms for configuring each node type
 - **Save & Load**: Persist flows to localStorage with export/import functionality
 - **Real-time Preview**: See your flow changes immediately
+- **🎤 UltraVox Integration**: Voice-enabled conversational AI with call stages
+- **Real-time Call Management**: Start, manage, and monitor voice calls through flows
+- **Intelligent Stage Transitions**: Automatic flow navigation based on conversation context
 
 ### 🏗️ Node Types
 
@@ -65,12 +68,23 @@ A visual conversation flow builder built with React, ReactFlow, and Next.js that
    npm install
    ```
 
-3. **Start the development server**
+3. **Set up environment variables**
+   Create a `.env.local` file in the root directory:
+   ```bash
+   # UltraVox API Configuration
+   NEXT_PUBLIC_ULTRAVOX_API_KEY=your_ultravox_api_key_here
+   ULTRAVOX_API_KEY=your_ultravox_api_key_here
+   
+   # Base URL for webhook endpoints (set this to your deployed URL in production)
+   NEXT_PUBLIC_BASE_URL=http://localhost:3000
+   ```
+
+4. **Start the development server**
    ```bash
    npm run dev
    ```
 
-4. **Open your browser**
+5. **Open your browser**
    Navigate to `http://localhost:3000`
 
 ## Usage Guide
@@ -129,6 +143,35 @@ A visual conversation flow builder built with React, ReactFlow, and Next.js that
 #### Reset View
 - **Reset View Button**: Centers and fits the flow in the viewport
 
+### UltraVox Voice Integration
+
+#### Starting a Voice Call
+1. **Configure your flow** with the desired conversation structure
+2. **Click the UltraVox button** (🎤) in the top toolbar to open the call manager
+3. **Start Call** to initiate a voice conversation using your flow
+4. **Monitor the call** through the real-time status indicators
+
+#### Call Stages and Flow Navigation
+- Each flow node automatically becomes a **call stage** in UltraVox
+- The AI agent uses **temporary tools** to navigate between nodes based on user responses
+- **Condition nodes** evaluate user input and branch accordingly
+- **Question nodes** present options and wait for user responses
+- **Message nodes** deliver information and automatically proceed
+
+#### Call Management Features
+- **Real-time status** indicators (Starting, Active, Ended, Failed)
+- **Microphone and speaker** controls
+- **Call transcripts** and debug messages
+- **Current node tracking** with visual indicators
+- **Automatic stage transitions** based on conversation flow
+
+#### API Integration
+The system uses UltraVox's call stages API to:
+- Create calls with dynamic system prompts
+- Register flow navigation tools
+- Handle stage transitions via webhooks
+- Maintain conversation context and variables
+
 ## Technical Architecture
 
 ### Tech Stack
@@ -138,6 +181,7 @@ A visual conversation flow builder built with React, ReactFlow, and Next.js that
 - **Tailwind CSS**: Utility-first CSS framework
 - **Lucide React**: Beautiful icon library
 - **TypeScript**: Type-safe development
+- **UltraVox SDK**: Voice-enabled conversational AI platform
 
 ### Project Structure
 ```
@@ -146,13 +190,20 @@ src/
 │   ├── FlowBuilder.tsx        # Main flow builder component
 │   ├── NodeSidebar.tsx        # Left sidebar with draggable nodes
 │   ├── ConfigPanel.tsx        # Right configuration panel
+│   ├── UltraVoxCallManager.tsx # UltraVox call management component
 │   └── nodes/
 │       ├── StartNode.tsx      # Green start node component
 │       ├── MessageNode.tsx    # Blue message node component
 │       ├── QuestionNode.tsx   # Purple question node component
 │       └── ConditionNode.tsx  # Yellow condition node component
+├── lib/
+│   └── ultravox.ts           # UltraVox service and flow integration
 ├── types.ts                   # TypeScript type definitions
 └── app/
+    ├── api/
+    │   └── flow/
+    │       ├── navigate/      # Flow navigation API endpoint
+    │       └── evaluate/      # Condition evaluation API endpoint
     ├── page.tsx              # Main application page
     ├── layout.tsx            # Root layout
     └── globals.css           # Global styles

@@ -19,11 +19,12 @@ import 'reactflow/dist/style.css';
 import { Save, Download, Trash2, RotateCcw } from 'lucide-react';
 import NodeSidebar from './NodeSidebar';
 import ConfigPanel from './ConfigPanel';
+import UltraVoxCallManager from './UltraVoxCallManager';
 import StartNode from './nodes/StartNode';
 import MessageNode from './nodes/MessageNode';
 import QuestionNode from './nodes/QuestionNode';
 import ConditionNode from './nodes/ConditionNode';
-import { FlowNode, FlowData, NodeType, NodeData } from '../types';
+import { FlowNode, FlowData, NodeType, NodeData, CallStatus } from '../types';
 
 const nodeTypes: NodeTypes = {
   start: StartNode,
@@ -47,8 +48,14 @@ const FlowBuilder: React.FC = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [showUltraVoxPanel, setShowUltraVoxPanel] = useState(false);
+  const [callStatus, setCallStatus] = useState<CallStatus>('STATUS_UNSPECIFIED');
+  const [currentNodeId, setCurrentNodeId] = useState<string | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+
+  // UltraVox API key (in production, this should come from environment variables)
+  const ultravoxApiKey = process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY || '';
 
   // Load saved flow on component mount
   useEffect(() => {
@@ -215,7 +222,37 @@ const FlowBuilder: React.FC = () => {
             <Trash2 className="w-4 h-4" />
             Clear
           </button>
+          <button
+            onClick={() => setShowUltraVoxPanel(!showUltraVoxPanel)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg shadow-md transition-colors ${
+              showUltraVoxPanel 
+                ? 'bg-purple-700 text-white' 
+                : 'bg-purple-600 text-white hover:bg-purple-700'
+            }`}
+          >
+            🎤 UltraVox
+          </button>
         </div>
+
+        {/* UltraVox Panel */}
+        {showUltraVoxPanel && (
+          <div className="absolute top-20 left-4 z-10 w-80">
+            <UltraVoxCallManager
+              flowData={{ nodes: nodes as FlowNode[], edges }}
+              apiKey={ultravoxApiKey}
+              onCallStatusChange={setCallStatus}
+              onStageChange={setCurrentNodeId}
+            />
+          </div>
+        )}
+
+        {/* Current Stage Indicator */}
+        {currentNodeId && callStatus === 'STATUS_ACTIVE' && (
+          <div className="absolute bottom-4 left-4 z-10 bg-purple-600 text-white px-3 py-2 rounded-lg shadow-md">
+            <div className="text-xs opacity-75">Current Node:</div>
+            <div className="font-medium">{currentNodeId}</div>
+          </div>
+        )}
 
         <div className="w-full h-full" ref={reactFlowWrapper}>
           <ReactFlow
