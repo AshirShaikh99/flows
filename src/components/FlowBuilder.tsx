@@ -56,6 +56,9 @@ const FlowBuilder: React.FC = () => {
 
   // UltraVox API key (in production, this should come from environment variables)
   const ultravoxApiKey = process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY || '';
+  
+  // Check if API key is configured
+  const isApiKeyConfigured = Boolean(ultravoxApiKey && ultravoxApiKey !== 'your_ultravox_api_key_here');
 
   // Load saved flow on component mount
   useEffect(() => {
@@ -237,12 +240,42 @@ const FlowBuilder: React.FC = () => {
         {/* UltraVox Panel */}
         {showUltraVoxPanel && (
           <div className="absolute top-20 left-4 z-10 w-80">
-            <UltraVoxCallManager
-              flowData={{ nodes: nodes as FlowNode[], edges }}
-              apiKey={ultravoxApiKey}
-              onCallStatusChange={setCallStatus}
-              onStageChange={setCurrentNodeId}
-            />
+            {!isApiKeyConfigured ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">UltraVox Setup Required</h3>
+                </div>
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <p className="text-yellow-700 text-sm">
+                    <strong>API Key Missing:</strong> Please configure your UltraVox API key to use voice features.
+                  </p>
+                </div>
+                <div className="space-y-3 text-sm text-gray-600">
+                  <div>
+                    <strong>Steps to fix:</strong>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1 text-xs">
+                    <li>Create a <code>.env.local</code> file in your project root</li>
+                    <li>Add: <code>NEXT_PUBLIC_ULTRAVOX_API_KEY=your_key_here</code></li>
+                    <li>Add: <code>ULTRAVOX_API_KEY=your_key_here</code></li>
+                    <li>Restart the development server</li>
+                  </ol>
+                  <div className="pt-2 text-xs">
+                    <strong>Get your API key:</strong><br />
+                    1. Sign up at <a href="https://ultravox.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">ultravox.ai</a><br />
+                    2. Navigate to your dashboard<br />
+                    3. Generate an API key
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <UltraVoxCallManager
+                flowData={{ nodes: nodes as FlowNode[], edges }}
+                apiKey={ultravoxApiKey}
+                onCallStatusChange={setCallStatus}
+                onStageChange={setCurrentNodeId}
+              />
+            )}
           </div>
         )}
 

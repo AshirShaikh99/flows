@@ -50,6 +50,18 @@ export default function UltraVoxCallManager({
     setError(null);
 
     try {
+      // Check microphone permissions first
+      console.log('Checking microphone permissions...');
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop()); // Clean up
+        console.log('Microphone permission granted');
+      } catch (permError) {
+        console.warn('Microphone permission denied or not available:', permError);
+        setError('Microphone access is required for voice calls. Please allow microphone access and try again.');
+        return;
+      }
+
       // Validate flow data
       if (!flowData.nodes.length) {
         throw new Error('Flow must have at least one node');
@@ -62,12 +74,15 @@ export default function UltraVoxCallManager({
 
       // Create the call
       const call = await ultravoxServiceRef.current.createCall(flowData);
+      console.log('Call created successfully:', call);
       setCurrentCall(call);
       setCallStatus('STATUS_STARTING');
       onCallStatusChange?.('STATUS_STARTING');
 
       // Join the call
+      console.log('About to join call with URL:', call.joinUrl);
       await ultravoxServiceRef.current.joinCall(call.joinUrl);
+      console.log('Join call completed');
       
       setIsCallActive(true);
       setCallStatus('STATUS_ACTIVE');
@@ -78,7 +93,30 @@ export default function UltraVoxCallManager({
 
     } catch (err) {
       console.error('Failed to start call:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start call');
+      
+      // Extract detailed error information
+      let errorMessage = 'Failed to start call';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        
+        // If the error contains API response details, parse them
+        if (err.message.includes('Bad Request') && err.message.includes('{')) {
+          try {
+            const errorMatch = err.message.match(/\{.*\}/);
+            if (errorMatch) {
+              const errorDetails = JSON.parse(errorMatch[0]);
+                             if (errorDetails.details && typeof errorDetails.details === 'string') {
+                 errorMessage = `UltraVox API Error: ${errorDetails.details}`;
+               }
+            }
+          } catch (parseError) {
+            // If parsing fails, keep the original error message
+            console.warn('Could not parse error details:', parseError);
+          }
+        }
+      }
+      
+      setError(errorMessage);
       setCallStatus('STATUS_FAILED');
       onCallStatusChange?.('STATUS_FAILED');
     } finally {
@@ -89,25 +127,39 @@ export default function UltraVoxCallManager({
   const endCall = useCallback(async () => {
     if (!ultravoxServiceRef.current) return;
 
+    // Immediately update UI state to show ending
+    setCallStatus('STATUS_ENDED');
+    setIsCallActive(false);
+    setCurrentCall(null);
+    onCallStatusChange?.('STATUS_ENDED');
+    
     setIsLoading(true);
     setError(null);
 
     try {
+      console.log('🔚 User requested to end call');
       await ultravoxServiceRef.current.endCall();
-      setIsCallActive(false);
+      
+      // Clean up UI state
+      setTranscripts([]);
+      setDebugMessages([]);
+      
+      console.log('✅ Call ended successfully');
+
+    } catch (err) {
+      console.error('❌ Failed to end call:', err);
+      // Don't show error to user since call is ending anyway
+      // setError(err instanceof Error ? err.message : 'Failed to end call');
+    } finally {
+      setIsLoading(false);
+      
+      // Ensure UI state is clean regardless of any errors
       setCallStatus('STATUS_ENDED');
+      setIsCallActive(false);
       setCurrentCall(null);
       setTranscripts([]);
       setDebugMessages([]);
       onCallStatusChange?.('STATUS_ENDED');
-
-      console.log('Call ended successfully');
-
-    } catch (err) {
-      console.error('Failed to end call:', err);
-      setError(err instanceof Error ? err.message : 'Failed to end call');
-    } finally {
-      setIsLoading(false);
     }
   }, [onCallStatusChange]);
 
@@ -123,17 +175,7 @@ export default function UltraVoxCallManager({
     console.log(`Speaker ${!isSpeakerMuted ? 'muted' : 'unmuted'}`);
   }, [isSpeakerMuted]);
 
-  const getCurrentStage = useCallback(async () => {
-    if (!ultravoxServiceRef.current || !currentCall) return null;
 
-    try {
-      const stage = await ultravoxServiceRef.current.getCurrentStage();
-      return stage;
-    } catch (err) {
-      console.error('Failed to get current stage:', err);
-      return null;
-    }
-  }, [currentCall]);
 
   // Status indicator color
   const getStatusColor = (status: CallStatus) => {
@@ -237,7 +279,7 @@ export default function UltraVoxCallManager({
             <p><strong>Model:</strong> {currentCall.model}</p>
             <p><strong>Voice:</strong> {currentCall.voice}</p>
             {currentCall.metadata && (
-              <p><strong>Flow ID:</strong> {currentCall.metadata.flowId}</p>
+              <p><strong>Flow ID:</strong> {String(currentCall.metadata.flowId || 'N/A')}</p>
             )}
           </div>
 

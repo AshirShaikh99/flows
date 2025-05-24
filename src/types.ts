@@ -210,7 +210,7 @@ export interface JsonSchema {
 
 export interface DynamicParameter {
   name: string;
-  location: 'BODY' | 'QUERY' | 'PATH' | 'HEADER';
+  location: 'PARAMETER_LOCATION_BODY' | 'PARAMETER_LOCATION_QUERY' | 'PARAMETER_LOCATION_PATH' | 'PARAMETER_LOCATION_HEADER';
   schema: JsonSchema;
   required: boolean;
 }

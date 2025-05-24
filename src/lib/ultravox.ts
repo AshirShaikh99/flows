@@ -11,7 +11,6 @@ import {
 
 export class UltraVoxFlowService {
   private apiKey: string;
-  private baseUrl: string = 'https://api.ultravox.ai/api';
   private currentSession: UltravoxSession | null = null;
   private executionContext: FlowExecutionContext | null = null;
 
@@ -21,6 +20,7 @@ export class UltraVoxFlowService {
 
   /**
    * Create a new UltraVox call for the flow
+   * This now uses the server-side API route to avoid CORS issues
    */
   async createCall(flowData: FlowData, startNodeId?: string): Promise<UltraVoxCall> {
     const startNode = startNodeId 
@@ -34,20 +34,30 @@ export class UltraVoxFlowService {
     // Generate initial system prompt based on the start node
     const initialPrompt = this.generateSystemPromptForNode(startNode, flowData);
     
-    // Create the call
+    // Create call config with proper first speaker message and tools
+    const firstSpeakerText = startNode.data.content && startNode.data.content.trim() !== '' && startNode.data.content !== 'Start'
+      ? startNode.data.content
+      : "Hello! I'm here to help you navigate through this conversation flow. How can I assist you today?";
+
     const callConfig = {
       systemPrompt: initialPrompt,
       model: 'fixie-ai/ultravox',
       voice: 'Mark',
       temperature: 0.7,
       firstSpeaker: 'FIRST_SPEAKER_AGENT',
+      firstSpeakerSettings: {
+        agent: {
+          text: firstSpeakerText
+        }
+      },
       medium: {
         serverWebSocket: {
           inputSampleRate: 48000,
           outputSampleRate: 48000,
         }
       },
-      selectedTools: this.generateToolsForNode(startNode, flowData),
+      // Temporarily disable tools to debug WebSocket connection issues
+      // selectedTools: this.generateToolsForNode(startNode, flowData),
       metadata: {
         flowId: `flow_${Date.now()}`,
         startNodeId: startNode.id,
@@ -55,17 +65,21 @@ export class UltraVoxFlowService {
       }
     };
 
-    const response = await fetch(`${this.baseUrl}/calls`, {
+    // Call our server-side API route instead of Ultravox directly
+    const response = await fetch('/api/ultravox/calls', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey
       },
-      body: JSON.stringify(callConfig)
+      body: JSON.stringify({
+        callConfig,
+        apiKey: this.apiKey
+      })
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create call: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Failed to create call: ${response.statusText} - ${errorText}`);
     }
 
     const call: UltraVoxCall = await response.json();
@@ -83,25 +97,82 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Join a call using the SDK
+   * Join a call using the SDK with enhanced error handling
    */
   async joinCall(joinUrl: string): Promise<void> {
-    if (this.currentSession) {
-      await this.currentSession.leaveCall();
+    console.log('🔊 Attempting to join call with URL:', joinUrl);
+    
+    if (!joinUrl) {
+      throw new Error('Join URL is required');
+    }
+    
+    if (!joinUrl.startsWith('wss://')) {
+      throw new Error(`Invalid join URL format: ${joinUrl}`);
     }
 
-    this.currentSession = new UltravoxSession({
-      experimentalMessages: new Set(['debug'])
-    });
+    if (this.currentSession) {
+      console.log('🔄 Leaving existing session...');
+      try {
+        await this.currentSession.leaveCall();
+      } catch (error) {
+        console.warn('⚠️ Error leaving previous session:', error);
+      }
+    }
 
-    // Register flow navigation tools
-    this.registerFlowTools();
+    console.log('🎤 Creating new UltraVox session...');
+    try {
+      this.currentSession = new UltravoxSession({
+        experimentalMessages: new Set(['debug'])
+      });
+      console.log('✅ UltraVox session created successfully');
 
-    // Listen for session events
-    this.setupSessionEventListeners();
+      // Setup event listeners before joining
+      this.setupSessionEventListeners();
 
-    // Join the call
-    this.currentSession.joinCall(joinUrl);
+      // Register flow navigation tools
+      this.registerFlowTools();
+
+      console.log('🌐 Calling joinCall with URL:', joinUrl);
+      await this.currentSession.joinCall(joinUrl);
+      console.log('✅ Successfully joined UltraVox call');
+      
+      // Wait a moment for the connection to establish and check status
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log('📊 Session status after join:', this.currentSession.status);
+      
+      // Try to trigger audio context if it's suspended
+      this.ensureAudioContext();
+      
+    } catch (error) {
+      console.error('❌ Failed to join UltraVox call:', error);
+      console.error('🔍 Error type:', typeof error);
+      console.error('📝 Error details:', JSON.stringify(error, null, 2));
+      throw new Error(`WebSocket connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /**
+   * Ensure audio context is running (fixes Safari/Chrome autoplay restrictions)
+   */
+  private ensureAudioContext(): void {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioContext) {
+        const audioContext = new AudioContext();
+        if (audioContext.state === 'suspended') {
+          console.log('🔊 Audio context suspended, attempting to resume...');
+          audioContext.resume().then(() => {
+            console.log('✅ Audio context resumed successfully');
+          }).catch((error) => {
+            console.warn('⚠️ Failed to resume audio context:', error);
+          });
+        } else {
+          console.log('✅ Audio context state:', audioContext.state);
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Audio context check failed:', error);
+    }
   }
 
   /**
@@ -123,7 +194,7 @@ export class UltraVoxFlowService {
     // Create new stage configuration
     const stageConfig = this.createStageConfigForNode(targetNode);
     
-    // Send stage transition request
+    // Send stage transition request via server-side API
     const response = await this.sendStageTransition(stageConfig, transition);
 
     if (response.ok) {
@@ -153,13 +224,14 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Get all stages for a call
+   * Get all stages for a call via server-side API
    */
   async getCallStages(callId: string): Promise<UltraVoxCallStage[]> {
-    const response = await fetch(`${this.baseUrl}/calls/${callId}/stages`, {
+    const response = await fetch(`/api/ultravox/calls/${callId}/stages`, {
       method: 'GET',
       headers: {
-        'X-API-Key': this.apiKey
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey
       }
     });
 
@@ -172,13 +244,14 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Get specific call stage
+   * Get specific call stage via server-side API
    */
   async getCallStage(callId: string, stageId: string): Promise<UltraVoxCallStage> {
-    const response = await fetch(`${this.baseUrl}/calls/${callId}/stages/${stageId}`, {
+    const response = await fetch(`/api/ultravox/calls/${callId}/stages/${stageId}`, {
       method: 'GET',
       headers: {
-        'X-API-Key': this.apiKey
+        'Content-Type': 'application/json',
+        'x-api-key': this.apiKey
       }
     });
 
@@ -190,14 +263,39 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * End the current call
+   * End the current call with improved error handling
    */
   async endCall(): Promise<void> {
+    console.log('🔚 Attempting to end UltraVox call...');
+    
     if (this.currentSession) {
-      await this.currentSession.leaveCall();
-      this.currentSession = null;
+      try {
+        console.log('📤 Leaving UltraVox session...');
+        
+        // Set a timeout for the leaveCall operation
+        const leaveCallPromise = this.currentSession.leaveCall();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Leave call timeout')), 5000)
+        );
+        
+        await Promise.race([leaveCallPromise, timeoutPromise]);
+        console.log('✅ Successfully left UltraVox session');
+        
+      } catch (error) {
+        console.warn('⚠️ Error while leaving call (forcing cleanup):', error);
+        // Force cleanup even if leaveCall fails
+      } finally {
+        // Always clean up the session reference
+        this.currentSession = null;
+        console.log('🧹 Session reference cleared');
+      }
+    } else {
+      console.log('ℹ️ No active session to end');
     }
+    
+    // Always clean up execution context
     this.executionContext = null;
+    console.log('✅ Call ended and context cleared');
   }
 
   /**
@@ -264,7 +362,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
         dynamicParameters: [
           {
             name: 'nodeId',
-            location: 'BODY',
+            location: 'PARAMETER_LOCATION_BODY',
             schema: {
               type: 'string',
               description: 'The ID of the next node to navigate to'
@@ -273,7 +371,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
           },
           {
             name: 'userResponse',
-            location: 'BODY',
+            location: 'PARAMETER_LOCATION_BODY',
             schema: {
               type: 'string',
               description: 'The user response that triggered this navigation'
@@ -297,7 +395,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
           dynamicParameters: [
             {
               name: 'userInput',
-              location: 'BODY',
+              location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
                 description: 'The user input to evaluate against the condition'
@@ -306,7 +404,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
             },
             {
               name: 'conditionValue',
-              location: 'BODY',
+              location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
                 description: 'The expected value for the condition'
@@ -315,7 +413,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
             },
             {
               name: 'operator',
-              location: 'BODY',
+              location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
                 enum: ['equals', 'contains'],
@@ -436,17 +534,30 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
   private setupSessionEventListeners(): void {
     if (!this.currentSession) return;
 
+    console.log('🎧 Setting up UltraVox session event listeners...');
+
     this.currentSession.addEventListener('status', (event) => {
-      console.log('UltraVox session status:', this.currentSession?.status);
+      console.log('📡 UltraVox session status changed:', this.currentSession?.status, event);
     });
 
     this.currentSession.addEventListener('transcripts', (event) => {
-      console.log('Transcripts updated:', this.currentSession?.transcripts);
+      console.log('📝 Transcripts updated:', this.currentSession?.transcripts, event);
     });
 
     this.currentSession.addEventListener('experimental_message', (msg) => {
-      console.log('Debug message:', JSON.stringify(msg));
+      console.log('🔬 UltraVox debug message:', JSON.stringify(msg));
     });
+
+    // Add more specific event listeners for debugging
+    this.currentSession.addEventListener('audio', (event) => {
+      console.log('🔊 Audio event:', event);
+    });
+
+    this.currentSession.addEventListener('error', (event) => {
+      console.error('❌ UltraVox session error:', event);
+    });
+
+    console.log('✅ Event listeners set up successfully');
   }
 }
 
