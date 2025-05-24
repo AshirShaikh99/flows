@@ -1,57 +1,61 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { GitBranch } from 'lucide-react';
+import { GitBranch, Settings } from 'lucide-react';
 import { NodeData } from '../../types';
 
 interface ConditionNodeProps extends NodeProps {
   data: NodeData;
 }
 
-const ConditionNode: React.FC<ConditionNodeProps> = ({ selected }) => {
+const ConditionNode: React.FC<ConditionNodeProps> = ({ data, selected }) => {
   return (
-    <div className={`relative bg-yellow-500 rotate-45 w-20 h-20 flex items-center justify-center shadow-lg border-2 ${
+    <div className={`relative bg-yellow-500 rounded-lg min-w-[160px] max-w-[200px] p-3 shadow-lg border-2 ${
       selected ? 'border-yellow-300' : 'border-yellow-600'
     } transition-all`}>
-      <div className="-rotate-45">
-        <GitBranch className="w-5 h-5 text-white" />
+      <div className="flex items-center gap-2 mb-2">
+        <GitBranch className="w-4 h-4 text-white" />
+        <span className="text-white text-sm font-medium">Condition</span>
+        {data.customPrompt && (
+          <div title="Custom prompt configured">
+            <Settings className="w-3 h-3 text-yellow-200" />
+          </div>
+        )}
+      </div>
+      
+      <div className="text-white text-xs leading-relaxed">
+        {data.condition ? (
+          <>
+            <div className="font-medium">{data.condition.operator}</div>
+            <div className="text-yellow-100">&quot;{data.condition.value}&quot;</div>
+          </>
+        ) : (
+          'Click to configure...'
+        )}
       </div>
       
       <Handle
         type="target"
         position={Position.Left}
         className="w-3 h-3 bg-yellow-600 border-2 border-white"
-        style={{ left: '-6px', top: '50%', transform: 'translateY(-50%)' }}
       />
       
-      {/* True branch */}
+      {/* Yes branch */}
       <Handle
         type="source"
-        position={Position.Top}
-        id="true"
+        position={Position.Right}
+        id="yes"
         className="w-3 h-3 bg-yellow-600 border-2 border-white"
-        style={{ top: '-6px', left: '50%', transform: 'translateX(-50%)' }}
+        style={{ top: '35%' }}
       />
       
-      {/* False branch */}
+      {/* No branch */}
       <Handle
         type="source"
-        position={Position.Bottom}
-        id="false"
+        position={Position.Right}
+        id="no"
         className="w-3 h-3 bg-yellow-600 border-2 border-white"
-        style={{ bottom: '-6px', left: '50%', transform: 'translateX(-50%)' }}
+        style={{ top: '65%' }}
       />
-      
-      <div className="absolute -bottom-12 left-1/2 transform -translate-x-1/2 text-xs text-gray-600 whitespace-nowrap -rotate-45">
-        Condition
-      </div>
-      
-      {/* Labels for true/false branches */}
-      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 text-xs text-green-600 font-medium -rotate-45">
-        Yes
-      </div>
-      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-red-600 font-medium -rotate-45">
-        No
-      </div>
     </div>
   );
 };

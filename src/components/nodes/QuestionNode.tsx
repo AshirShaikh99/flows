@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Settings } from 'lucide-react';
 import { NodeData } from '../../types';
 
 interface QuestionNodeProps extends NodeProps {
@@ -17,6 +17,11 @@ const QuestionNode: React.FC<QuestionNodeProps> = ({ data, selected }) => {
       <div className="flex items-center gap-2 mb-2">
         <HelpCircle className="w-4 h-4 text-white" />
         <span className="text-white text-sm font-medium">Question</span>
+        {data.customPrompt && (
+          <div title="Custom prompt configured">
+            <Settings className="w-3 h-3 text-purple-200" />
+          </div>
+        )}
       </div>
       
       <div className="text-white text-xs leading-relaxed mb-2">

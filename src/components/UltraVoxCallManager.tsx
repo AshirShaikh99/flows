@@ -40,6 +40,71 @@ export default function UltraVoxCallManager({
     }
   }, [apiKey]);
 
+  // Setup event listeners for session events
+  useEffect(() => {
+    if (!ultravoxServiceRef.current) return;
+
+    const currentSession = ultravoxServiceRef.current.getCurrentSession();
+    if (!currentSession) return;
+
+    // Handle transcript updates
+    const handleTranscriptUpdate = () => {
+      const sessionTranscripts = currentSession.transcripts;
+      if (sessionTranscripts && sessionTranscripts.length > 0) {
+        const transcriptTexts = sessionTranscripts.map(t => `${t.speaker}: ${t.text}`);
+        setTranscripts(transcriptTexts);
+      }
+    };
+
+    // Handle status changes
+    const handleStatusUpdate = () => {
+      const sessionStatus = currentSession.status;
+      console.log('📊 Session status update:', sessionStatus);
+      
+      // Map UltraVox session status to our call status
+      switch (sessionStatus) {
+        case 'connecting':
+          setCallStatus('STATUS_STARTING');
+          onCallStatusChange?.('STATUS_STARTING');
+          break;
+        case 'idle':
+        case 'listening':
+        case 'thinking':
+        case 'speaking':
+          setCallStatus('STATUS_ACTIVE');
+          onCallStatusChange?.('STATUS_ACTIVE');
+          break;
+        case 'disconnected':
+        case 'disconnecting':
+          setCallStatus('STATUS_ENDED');
+          setIsCallActive(false);
+          onCallStatusChange?.('STATUS_ENDED');
+          break;
+        default:
+          console.log('Unknown session status:', sessionStatus);
+      }
+    };
+
+    // Handle debug messages
+    const handleDebugMessage = (event: Event) => {
+      const experimentalEvent = event as any; // UltraVoxExperimentalMessageEvent
+      const message = experimentalEvent.message || event;
+      setDebugMessages(prev => [...prev.slice(-9), JSON.stringify(message)]);
+    };
+
+    // Add event listeners
+    currentSession.addEventListener('transcripts', handleTranscriptUpdate);
+    currentSession.addEventListener('status', handleStatusUpdate);
+    currentSession.addEventListener('experimental_message', handleDebugMessage);
+
+    // Cleanup
+    return () => {
+      currentSession.removeEventListener('transcripts', handleTranscriptUpdate);
+      currentSession.removeEventListener('status', handleStatusUpdate);
+      currentSession.removeEventListener('experimental_message', handleDebugMessage);
+    };
+  }, [isCallActive, onCallStatusChange]);
+
   const startCall = useCallback(async () => {
     if (!ultravoxServiceRef.current) {
       setError('UltraVox service not initialized');
@@ -51,13 +116,13 @@ export default function UltraVoxCallManager({
 
     try {
       // Check microphone permissions first
-      console.log('Checking microphone permissions...');
+      console.log('🎤 Checking microphone permissions...');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach(track => track.stop()); // Clean up
-        console.log('Microphone permission granted');
+        console.log('✅ Microphone permission granted');
       } catch (permError) {
-        console.warn('Microphone permission denied or not available:', permError);
+        console.warn('⚠️ Microphone permission denied:', permError);
         setError('Microphone access is required for voice calls. Please allow microphone access and try again.');
         return;
       }
@@ -73,44 +138,52 @@ export default function UltraVoxCallManager({
       }
 
       // Create the call
+      console.log('📞 Creating UltraVox call...');
       const call = await ultravoxServiceRef.current.createCall(flowData);
-      console.log('Call created successfully:', call);
+      console.log('✅ Call created successfully:', call);
       setCurrentCall(call);
-      setCallStatus('STATUS_STARTING');
-      onCallStatusChange?.('STATUS_STARTING');
 
-      // Join the call
-      console.log('About to join call with URL:', call.joinUrl);
+      // Join the call using the SDK
+      console.log('🔗 Joining call with SDK...');
       await ultravoxServiceRef.current.joinCall(call.joinUrl);
-      console.log('Join call completed');
-      
+      console.log('✅ Successfully joined call');
+
+      // Wait for session to stabilize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       setIsCallActive(true);
       setCallStatus('STATUS_ACTIVE');
       onCallStatusChange?.('STATUS_ACTIVE');
       onStageChange?.(startNode.id);
 
-      console.log('Call started successfully:', call);
+      // Initialize mute states from the session
+      const currentSession = ultravoxServiceRef.current.getCurrentSession();
+      if (currentSession) {
+        setIsMicMuted(currentSession.isMicMuted);
+        setIsSpeakerMuted(currentSession.isSpeakerMuted);
+      }
+
+      console.log('🎉 Call started successfully');
 
     } catch (err) {
-      console.error('Failed to start call:', err);
+      console.error('❌ Failed to start call:', err);
       
       // Extract detailed error information
       let errorMessage = 'Failed to start call';
       if (err instanceof Error) {
         errorMessage = err.message;
         
-        // If the error contains API response details, parse them
+        // Parse API response details if available
         if (err.message.includes('Bad Request') && err.message.includes('{')) {
           try {
             const errorMatch = err.message.match(/\{.*\}/);
             if (errorMatch) {
               const errorDetails = JSON.parse(errorMatch[0]);
-                             if (errorDetails.details && typeof errorDetails.details === 'string') {
-                 errorMessage = `UltraVox API Error: ${errorDetails.details}`;
-               }
+              if (errorDetails.details && typeof errorDetails.details === 'string') {
+                errorMessage = `UltraVox API Error: ${errorDetails.details}`;
+              }
             }
           } catch (parseError) {
-            // If parsing fails, keep the original error message
             console.warn('Could not parse error details:', parseError);
           }
         }
@@ -149,7 +222,6 @@ export default function UltraVoxCallManager({
     } catch (err) {
       console.error('❌ Failed to end call:', err);
       // Don't show error to user since call is ending anyway
-      // setError(err instanceof Error ? err.message : 'Failed to end call');
     } finally {
       setIsLoading(false);
       
@@ -164,18 +236,34 @@ export default function UltraVoxCallManager({
   }, [onCallStatusChange]);
 
   const toggleMic = useCallback(() => {
-    // Note: These would integrate with the actual UltraVox session methods
-    // For now, we'll just update the UI state
-    setIsMicMuted(!isMicMuted);
-    console.log(`Microphone ${!isMicMuted ? 'muted' : 'unmuted'}`);
+    const currentSession = ultravoxServiceRef.current?.getCurrentSession();
+    if (!currentSession) return;
+
+    if (isMicMuted) {
+      currentSession.unmuteMic();
+      setIsMicMuted(false);
+      console.log('🎤 Microphone unmuted');
+    } else {
+      currentSession.muteMic();
+      setIsMicMuted(true);
+      console.log('🎤 Microphone muted');
+    }
   }, [isMicMuted]);
 
   const toggleSpeaker = useCallback(() => {
-    setIsSpeakerMuted(!isSpeakerMuted);
-    console.log(`Speaker ${!isSpeakerMuted ? 'muted' : 'unmuted'}`);
+    const currentSession = ultravoxServiceRef.current?.getCurrentSession();
+    if (!currentSession) return;
+
+    if (isSpeakerMuted) {
+      currentSession.unmuteSpeaker();
+      setIsSpeakerMuted(false);
+      console.log('🔊 Speaker unmuted');
+    } else {
+      currentSession.muteSpeaker();
+      setIsSpeakerMuted(true);
+      console.log('🔊 Speaker muted');
+    }
   }, [isSpeakerMuted]);
-
-
 
   // Status indicator color
   const getStatusColor = (status: CallStatus) => {
@@ -285,7 +373,7 @@ export default function UltraVoxCallManager({
 
           {transcripts.length > 0 && (
             <div className="border-t pt-3">
-              <h4 className="text-sm font-medium text-gray-900 mb-2">Transcripts</h4>
+              <h4 className="text-sm font-medium text-gray-900 mb-2">Live Transcripts</h4>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {transcripts.map((transcript, index) => (
                   <p key={index} className="text-xs text-gray-600 p-2 bg-gray-50 rounded">

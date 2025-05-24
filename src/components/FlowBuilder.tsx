@@ -312,12 +312,23 @@ const FlowBuilder: React.FC = () => {
       </div>
 
       {showConfigPanel && (
-        <ConfigPanel
-          selectedNode={selectedNode}
-          nodes={nodes as FlowNode[]}
-          onNodeUpdate={onNodeUpdate}
-          onClose={() => setShowConfigPanel(false)}
-        />
+        <>
+          {/* Mobile backdrop */}
+          <div 
+            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={() => setShowConfigPanel(false)}
+          />
+          
+          {/* ConfigPanel */}
+          <div className="fixed md:relative top-0 right-0 md:top-auto md:right-auto z-50 md:z-auto h-full md:h-auto">
+            <ConfigPanel
+              selectedNode={selectedNode}
+              nodes={nodes as FlowNode[]}
+              onNodeUpdate={onNodeUpdate}
+              onClose={() => setShowConfigPanel(false)}
+            />
+          </div>
+        </>
       )}
     </div>
   );

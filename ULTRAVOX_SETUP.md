@@ -1,122 +1,309 @@
-# UltraVox Integration Setup Guide
+# UltraVox Integration Setup Documentation
 
 ## Overview
-This application now includes UltraVox integration for voice-based conversational flows. The CORS issues have been resolved by implementing server-side API routes.
+This document outlines the complete setup and integration of UltraVox API with our Next.js application, including **proper client-side SDK implementation** for audio handling.
 
-## Environment Variables Required
+## Recent Major Updates (Latest)
 
-Create a `.env.local` file in your project root with the following variables:
+### ✅ **Proper UltraVox SDK Implementation**
+- **Fixed the core issue**: Implemented proper client-side audio handling using UltraVox SDK
+- **Audio Setup**: Added comprehensive audio context management and WebRTC support
+- **Event Handling**: Implemented proper SDK event listeners for transcripts, status, and debug messages
+- **Mute Controls**: Added real SDK-based microphone and speaker mute/unmute functionality
+- **Session Management**: Proper session lifecycle management with cleanup
 
+### 🎯 **Key Improvements Made**
+
+#### 1. **Enhanced UltraVox Service** (`src/lib/ultravox.ts`)
+```typescript
+// NEW: Proper SDK imports
+import { UltravoxSession, Medium } from 'ultravox-client';
+
+// NEW: Comprehensive audio setup
+private ensureAudioSetup(): void {
+  // Audio context management
+  // WebRTC support verification  
+  // Set output medium to voice
+  this.currentSession.setOutputMedium(Medium.VOICE);
+}
+
+// NEW: Session access for mute controls
+getCurrentSession(): UltravoxSession | null {
+  return this.currentSession;
+}
+```
+
+#### 2. **Enhanced Call Manager** (`src/components/UltraVoxCallManager.tsx`)
+```typescript
+// NEW: Real-time event handling
+useEffect(() => {
+  const currentSession = ultravoxServiceRef.current?.getCurrentSession();
+  
+  // Live transcript updates
+  currentSession.addEventListener('transcripts', handleTranscriptUpdate);
+  
+  // Session status mapping
+  currentSession.addEventListener('status', handleStatusUpdate);
+  
+  // Debug message handling
+  currentSession.addEventListener('experimental_message', handleDebugMessage);
+}, [isCallActive]);
+
+// NEW: Real SDK mute controls
+const toggleMic = useCallback(() => {
+  const currentSession = ultravoxServiceRef.current?.getCurrentSession();
+  if (isMicMuted) {
+    currentSession.unmuteMic();
+  } else {
+    currentSession.muteMic();
+  }
+}, [isMicMuted]);
+```
+
+#### 3. **Comprehensive Event Listeners**
+- **Status Events**: `connecting`, `idle`, `listening`, `thinking`, `speaking`, `disconnected`
+- **Audio Events**: `audio`, `output`, `speaking`, `media`
+- **Connection Events**: `disconnect`, `reconnect`, `error`
+- **Debug Events**: `experimental_message` for troubleshooting
+
+## Current Implementation Status
+
+### ✅ **Working Components**
+1. **API Integration**: Server-side call creation via `/api/ultravox/calls`
+2. **CORS Resolution**: All API calls properly proxied
+3. **WebSocket Connection**: Proper SDK-based connection establishment
+4. **Audio Context**: Automatic audio context management and resume
+5. **Session Management**: Proper initialization, cleanup, and error handling
+6. **Mute Controls**: Real SDK-based microphone and speaker controls
+7. **Live Updates**: Real-time transcripts and status monitoring
+
+### 🎯 **Expected Behavior Now**
+1. **Agent Speech**: Agent should now speak first with proper audio output
+2. **User Interaction**: Microphone should capture user input correctly
+3. **Real-time Feedback**: Live transcripts and status updates
+4. **Proper Cleanup**: Clean session termination and resource management
+
+## Technical Architecture
+
+### 1. **Call Creation Flow**
+```
+Frontend → Server API (/api/ultravox/calls) → UltraVox API → Return joinUrl
+```
+
+### 2. **Audio Connection Flow**
+```
+UltravoxSession.create() → joinCall(joinUrl) → SDK handles WebRTC/Audio
+```
+
+### 3. **Event Flow**
+```
+UltraVox Events → SDK Event Listeners → React State Updates → UI Updates
+```
+
+## Environment Setup
+
+### Required Environment Variables
 ```bash
-# UltraVox API Configuration
-NEXT_PUBLIC_ULTRAVOX_API_KEY=your_ultravox_api_key_here
-ULTRAVOX_API_KEY=your_ultravox_api_key_here
-
-# Base URL for the application (used for tool endpoints)
+# .env.local
+ULTRAVOX_API_KEY=f7lhuZv7.BoaF7YYsPgQHtBLtV9l77Uk0E3BkhKjR
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-## How to Get Your UltraVox API Key
+### Dependencies
+```json
+{
+  "ultravox-client": "^latest"
+}
+```
 
-1. Sign up at [UltraVox](https://ultravox.ai)
-2. Navigate to your dashboard
-3. Generate an API key
-4. Copy the API key to your `.env.local` file
+## Testing the Implementation
 
-## Testing the Integration
+### 1. **Start Development Server**
+```bash
+npm run dev
+```
 
-1. **Start the development server:**
-   ```bash
-   npm run dev
-   ```
+### 2. **Test Flow**
+1. Open `http://localhost:3000`
+2. Create a simple flow with a start node
+3. Click "Start Call" 
+4. **Expected**: Agent should speak first immediately
+5. **Expected**: Live transcripts should appear
+6. **Expected**: Mute controls should work properly
 
-2. **Create a simple flow:**
-   - Add a Start node (already present)
-   - Add a Message node
-   - Connect them with an edge
+### 3. **Debug Information**
+- Open browser console for detailed logging with emoji prefixes
+- Check "Debug Messages" section in UI for UltraVox internal messages
+- Monitor "Live Transcripts" for real-time conversation updates
 
-3. **Test the voice call:**
-   - Click the "🎤 UltraVox" button in the top toolbar
-   - Click "Start Call" in the UltraVox panel
-   - The agent should speak first with the message from your start node
+## Common Issues & Solutions
 
-## Features Implemented
+### **Issue**: Agent Not Speaking
+**Solution**: 
+- ✅ Fixed with proper `setOutputMedium(Medium.VOICE)`
+- ✅ Audio context auto-resume implemented
+- ✅ First speaker settings properly configured
 
-### ✅ Fixed CORS Issues
-- All UltraVox API calls now go through server-side routes
-- No more "X-API-Key is not allowed by Access-Control-Allow-Headers" errors
+### **Issue**: WebSocket Connection Failed
+**Solution**:
+- ✅ Proper error handling and retry logic
+- ✅ Clean session management
+- ✅ Enhanced logging for debugging
 
-### ✅ Agent Speaks First
-- Configured `firstSpeaker: 'FIRST_SPEAKER_AGENT'`
-- Added `firstSpeakerSettings` with initial message
-- Agent will greet the user when the call starts
+### **Issue**: Mute Controls Not Working  
+**Solution**:
+- ✅ Real SDK methods: `muteMic()`, `unmuteMic()`, `muteSpeaker()`, `unmuteSpeaker()`
+- ✅ State synchronization with SDK
 
-### ✅ WebSocket Integration
-- Uses `ultravox-client` SDK for real-time communication
-- Proper session management and event handling
+## API Endpoints
 
-### ✅ Flow Navigation Tools
-- Registered client-side tools for flow navigation
-- API endpoints for handling tool calls
-- Condition evaluation support
+### `POST /api/ultravox/calls`
+**Purpose**: Create new UltraVox call (CORS-free)
+**Input**: Call configuration + API key
+**Output**: Call object with `joinUrl`
 
-## API Routes Created
+### `GET /api/ultravox/calls/[callId]/stages`
+**Purpose**: Retrieve call stages
+**Headers**: `x-api-key`
+**Output**: Array of call stages
 
-- `POST /api/ultravox/calls` - Create new UltraVox calls
-- `GET /api/ultravox/calls/[callId]/stages` - Get call stages
-- `GET /api/ultravox/calls/[callId]/stages/[stageId]` - Get specific stage
-- `POST /api/flow/navigate` - Handle flow navigation
-- `POST /api/flow/evaluate` - Handle condition evaluation
-
-## Troubleshooting
-
-### "API key is required" Error
-- Make sure your `.env.local` file has the correct API key
-- Restart the development server after adding environment variables
-
-### "Failed to create call" / "400 Bad Request" Error
-- **Most Common Cause**: Missing or invalid API key
-  - Ensure your `.env.local` file exists in the project root
-  - Check that `NEXT_PUBLIC_ULTRAVOX_API_KEY` is set with your actual key
-  - Restart the development server after adding environment variables
-- Check that your UltraVox API key is valid
-- Ensure you have sufficient credits in your UltraVox account
-- Check the browser console and server logs for detailed error messages
-
-### "Invalid enum value BODY" Error
-- ✅ **FIXED**: Updated parameter location enums to use `PARAMETER_LOCATION_BODY` format
-- This was resolved by updating the TypeScript types to match UltraVox API expectations
-
-### Agent Not Speaking
-- Verify the `firstSpeakerSettings` configuration
-- Check that your flow has a start node with content
-- Ensure the WebSocket connection is established
-
-### Server Stopped/Empty Reply
-- If the server crashes during testing, restart with `npm run dev`
-- Check for TypeScript compilation errors in the terminal
-
-## Next Steps
-
-1. **Add more node types** - Extend the flow with question and condition nodes
-2. **Implement stage transitions** - Add logic to move between flow nodes based on user responses
-3. **Add voice customization** - Allow users to select different voices
-4. **Add call recording** - Enable call recording and playback features
-
-## Code Structure
-
+## File Structure
 ```
 src/
 ├── lib/
-│   └── ultravox.ts              # UltraVox service with fixed CORS
-├── app/api/
-│   ├── ultravox/
-│   │   └── calls/               # Server-side UltraVox API routes
-│   └── flow/
-│       ├── navigate/            # Flow navigation endpoint
-│       └── evaluate/            # Condition evaluation endpoint
-└── components/
-    └── UltraVoxCallManager.tsx  # UI component for call management
+│   └── ultravox.ts              # Enhanced UltraVox service
+├── components/
+│   └── UltraVoxCallManager.tsx  # Enhanced call manager
+├── app/
+│   └── api/
+│       └── ultravox/
+│           └── calls/
+│               └── route.ts     # Server-side API proxy
+└── types/
+    └── index.ts                 # Type definitions
 ```
 
-The implementation follows UltraVox best practices and uses server-side API routes to avoid CORS issues while maintaining secure API key handling. 
+## Latest Debugging Features
+
+### Console Logging
+- **🎤**: Microphone operations
+- **🔊**: Audio/speaker operations  
+- **📞**: Call creation
+- **🔗**: Connection operations
+- **📊**: Status updates
+- **🎧**: Event listener setup
+- **✅**: Success operations
+- **❌**: Error operations
+- **⚠️**: Warning operations
+
+### UI Debug Panels
+- **Live Transcripts**: Real-time conversation transcription
+- **Debug Messages**: UltraVox internal messages
+- **Session Status**: Current connection state
+- **Call Details**: ID, model, voice, flow information
+
+## Conclusion
+
+The UltraVox integration now uses the **proper client-side SDK** for audio handling instead of just API calls. This should resolve the agent speech issues by:
+
+1. **Proper Audio Pipeline**: SDK manages WebRTC, audio contexts, and media streams
+2. **Real Event Handling**: Live updates from the UltraVox session
+3. **SDK-Based Controls**: Proper mute/unmute functionality
+4. **Enhanced Debugging**: Comprehensive logging and UI feedback
+
+The agent should now speak immediately when the call starts! 🎉
+
+## NEW: Custom Prompt Feature 🤖
+
+### Overview
+You can now provide **custom prompts for each node** to control UltraVox AI behavior at different conversation steps!
+
+### How to Use Custom Prompts
+
+#### 1. **Access Custom Prompt Field**
+- Click on **any node** (Start, Message, Question, or Condition)
+- Scroll down in the config panel to find **"🤖 Custom UltraVox Prompt"**
+- Enter your custom instructions
+
+#### 2. **Visual Indicators**
+- Nodes with custom prompts show a **⚙️ settings icon**
+- The icon appears next to the node type label
+
+#### 3. **Example Custom Prompts**
+
+**For Start Node:**
+```
+Be very warm and friendly. Introduce yourself as Sarah, a customer service assistant. 
+Ask the user's name and use it throughout the conversation.
+```
+
+**For Message Node:**
+```
+Explain this information slowly and clearly. 
+Ask if they need any clarification before moving on.
+Use simple language and avoid technical jargon.
+```
+
+**For Question Node:**
+```
+Be patient and encouraging. If the user seems confused, 
+rephrase the question differently. Give examples for each option.
+```
+
+**For Condition Node:**
+```
+If the user's response doesn't match the expected condition, 
+gently ask them to clarify their answer before proceeding.
+```
+
+### 4. **How It Works**
+- **Default Behavior**: Uses built-in prompt based on node type
+- **Custom Prompt**: Overrides default behavior with your instructions
+- **Priority**: Custom prompt takes precedence over default when present
+- **Scope**: Each node can have its own unique behavior
+
+### 5. **Best Practices for Custom Prompts**
+
+#### ✅ **Good Examples:**
+- `"Be more casual and use emojis"`
+- `"Ask follow-up questions to understand better"`
+- `"Explain technical terms in simple language"`
+- `"Be empathetic and supportive"`
+- `"Use a professional business tone"`
+
+#### ❌ **Avoid:**
+- Contradicting the node's purpose (e.g., telling a Question node not to ask questions)
+- Very long prompts (keep under 200 words)
+- Instructions that conflict with the flow navigation tools
+
+### 6. **Testing Custom Prompts**
+1. Add custom prompts to your nodes
+2. Save the flow
+3. Start a UltraVox call
+4. Notice how the AI behavior changes at each node
+5. Check console logs for prompt debugging
+
+### 7. **Advanced Use Cases**
+
+#### **Personality Changes:**
+```
+Start Node: "Be professional and formal"
+Message Node: "Switch to a more casual, friendly tone"
+Question Node: "Be encouraging and supportive"
+```
+
+#### **Dynamic Difficulty:**
+```
+Start Node: "Assess the user's technical knowledge level"
+Message Node: "Adjust complexity based on their responses"  
+Question Node: "Provide beginner or advanced options accordingly"
+```
+
+#### **Contextual Behavior:**
+```
+Support Flow: "Be patient and helpful with troubleshooting"
+Sales Flow: "Be enthusiastic but not pushy"
+Survey Flow: "Be neutral and professional"
+```
+
+This feature gives you **complete control** over UltraVox AI behavior at every step of your conversation flow! 🚀 

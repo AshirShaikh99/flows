@@ -8,6 +8,7 @@ export interface FlowNode {
 export interface NodeData {
   label?: string;
   content?: string;
+  customPrompt?: string;
   question?: string;
   options?: ResponseOption[];
   condition?: Condition;

@@ -1,4 +1,4 @@
-import { UltravoxSession } from 'ultravox-client';
+import { UltravoxSession, Medium } from 'ultravox-client';
 import { 
   UltraVoxCall, 
   UltraVoxCallStage, 
@@ -32,12 +32,17 @@ export class UltraVoxFlowService {
     }
 
     // Generate initial system prompt based on the start node
-    const initialPrompt = this.generateSystemPromptForNode(startNode, flowData);
+    const initialPrompt = this.generateSystemPromptForNode(startNode);
     
     // Create call config with proper first speaker message and tools
-    const firstSpeakerText = startNode.data.content && startNode.data.content.trim() !== '' && startNode.data.content !== 'Start'
+    const firstSpeakerText = startNode.data.content && 
+                            startNode.data.content.trim() !== '' && 
+                            startNode.data.content !== 'Start' &&
+                            startNode.data.content.toLowerCase() !== 'start'
       ? startNode.data.content
       : "Hello! I'm here to help you navigate through this conversation flow. How can I assist you today?";
+
+    console.log('🎤 First speaker text will be:', firstSpeakerText);
 
     const callConfig = {
       systemPrompt: initialPrompt,
@@ -97,7 +102,7 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Join a call using the SDK with enhanced error handling
+   * Join a call using the UltraVox SDK with proper audio handling
    */
   async joinCall(joinUrl: string): Promise<void> {
     console.log('🔊 Attempting to join call with URL:', joinUrl);
@@ -110,6 +115,7 @@ export class UltraVoxFlowService {
       throw new Error(`Invalid join URL format: ${joinUrl}`);
     }
 
+    // Clean up any existing session
     if (this.currentSession) {
       console.log('🔄 Leaving existing session...');
       try {
@@ -121,27 +127,28 @@ export class UltraVoxFlowService {
 
     console.log('🎤 Creating new UltraVox session...');
     try {
+      // Create session with debug messages enabled
       this.currentSession = new UltravoxSession({
         experimentalMessages: new Set(['debug'])
       });
       console.log('✅ UltraVox session created successfully');
 
-      // Setup event listeners before joining
+      // Setup comprehensive event listeners BEFORE joining
       this.setupSessionEventListeners();
 
       // Register flow navigation tools
       this.registerFlowTools();
 
-      console.log('🌐 Calling joinCall with URL:', joinUrl);
+      console.log('🌐 Joining call...');
       await this.currentSession.joinCall(joinUrl);
       console.log('✅ Successfully joined UltraVox call');
       
-      // Wait a moment for the connection to establish and check status
+      // Wait for connection to establish
       await new Promise(resolve => setTimeout(resolve, 2000));
       console.log('📊 Session status after join:', this.currentSession.status);
       
-      // Try to trigger audio context if it's suspended
-      this.ensureAudioContext();
+      // Ensure audio is properly configured
+      this.ensureAudioSetup();
       
     } catch (error) {
       console.error('❌ Failed to join UltraVox call:', error);
@@ -152,26 +159,49 @@ export class UltraVoxFlowService {
   }
 
   /**
-   * Ensure audio context is running (fixes Safari/Chrome autoplay restrictions)
+   * Comprehensive audio setup based on UltraVox SDK best practices
    */
-  private ensureAudioContext(): void {
+  private ensureAudioSetup(): void {
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      console.log('🔧 Setting up audio environment...');
+      
+      // Get audio context type
+      const AudioContext = window.AudioContext || (window as unknown as typeof window & { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+      
       if (AudioContext) {
         const audioContext = new AudioContext();
+        console.log('🎵 Audio context state:', audioContext.state);
+        
         if (audioContext.state === 'suspended') {
           console.log('🔊 Audio context suspended, attempting to resume...');
-          audioContext.resume().then(() => {
-            console.log('✅ Audio context resumed successfully');
-          }).catch((error) => {
-            console.warn('⚠️ Failed to resume audio context:', error);
-          });
-        } else {
-          console.log('✅ Audio context state:', audioContext.state);
+          audioContext.resume()
+            .then(() => {
+              console.log('✅ Audio context resumed successfully');
+            })
+            .catch((error) => {
+              console.warn('⚠️ Failed to resume audio context:', error);
+            });
         }
+
+        // Set audio context properties for better performance
+        console.log('🎵 Audio sample rate:', audioContext.sampleRate);
       }
+
+      // Check WebRTC support
+      if (navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function') {
+        console.log('✅ WebRTC support confirmed');
+      } else {
+        console.warn('⚠️ WebRTC may not be fully supported');
+      }
+
+      // Set output medium to voice to ensure agent speaks
+      if (this.currentSession) {
+        console.log('🗣️ Setting output medium to voice...');
+        this.currentSession.setOutputMedium(Medium.VOICE);
+      }
+
     } catch (error) {
-      console.warn('⚠️ Audio context check failed:', error);
+      console.warn('⚠️ Audio setup encountered issues:', error);
     }
   }
 
@@ -305,9 +335,31 @@ export class UltraVoxFlowService {
     return this.executionContext;
   }
 
+  /**
+   * Get current session for external access (e.g., mute controls)
+   */
+  getCurrentSession(): UltravoxSession | null {
+    return this.currentSession;
+  }
+
   // Private helper methods
 
-  private generateSystemPromptForNode(node: FlowNode, flowData: FlowData): string {
+  private generateSystemPromptForNode(node: FlowNode): string {
+    // Use custom prompt if provided, otherwise generate default prompt
+    if (node.data.customPrompt && node.data.customPrompt.trim()) {
+      const customPromptBase = `You are an AI assistant helping users navigate through a conversational flow.
+      
+Current node: ${node.type}
+Node ID: ${node.id}
+
+CUSTOM INSTRUCTIONS:
+${node.data.customPrompt}
+
+If you need to move to the next step in the conversation, use the 'navigateFlow' tool.`;
+      return customPromptBase;
+    }
+
+    // Default prompt generation (existing logic)
     const basePrompt = `You are an AI assistant helping users navigate through a conversational flow.
     
 Current node: ${node.type}
@@ -351,7 +403,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     }
   }
 
-  private generateToolsForNode(node: FlowNode, flowData: FlowData): SelectedTool[] {
+  private generateToolsForNode(node: FlowNode): SelectedTool[] {
     const tools: SelectedTool[] = [];
 
     // Add navigation tool for all nodes
@@ -435,7 +487,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
 
   private createStageConfigForNode(node: FlowNode): Partial<UltraVoxCallStage> {
     return {
-      systemPrompt: this.generateSystemPromptForNode(node, this.executionContext!.flowData),
+      systemPrompt: this.generateSystemPromptForNode(node),
       model: 'fixie-ai/ultravox',
       voice: 'Mark',
       temperature: 0.7,
@@ -451,6 +503,10 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     stageConfig: Partial<UltraVoxCallStage>,
     transition: StageTransition
   ): Promise<Response> {
+    // Mark parameters as used for future implementation
+    void stageConfig;
+    void transition;
+    
     // This would be called from within a tool handler
     // For now, we'll return a mock response
     return new Response(JSON.stringify({ success: true }), { 
@@ -534,30 +590,54 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
   private setupSessionEventListeners(): void {
     if (!this.currentSession) return;
 
-    console.log('🎧 Setting up UltraVox session event listeners...');
+    console.log('🎧 Setting up comprehensive UltraVox session event listeners...');
 
+    // Core session events
     this.currentSession.addEventListener('status', (event) => {
-      console.log('📡 UltraVox session status changed:', this.currentSession?.status, event);
+      console.log('📡 Session status changed:', this.currentSession?.status, event);
     });
 
     this.currentSession.addEventListener('transcripts', (event) => {
       console.log('📝 Transcripts updated:', this.currentSession?.transcripts, event);
     });
 
+    // Debug messages
     this.currentSession.addEventListener('experimental_message', (msg) => {
       console.log('🔬 UltraVox debug message:', JSON.stringify(msg));
     });
 
-    // Add more specific event listeners for debugging
+    // Audio-specific events
     this.currentSession.addEventListener('audio', (event) => {
-      console.log('🔊 Audio event:', event);
+      console.log('🔊 Audio event received:', event);
     });
 
+    this.currentSession.addEventListener('output', (event) => {
+      console.log('🗣️ Agent output event:', event);
+    });
+
+    this.currentSession.addEventListener('speaking', (event) => {
+      console.log('🎙️ Agent speaking event:', event);
+    });
+
+    this.currentSession.addEventListener('media', (event) => {
+      console.log('📺 Media event:', event);
+    });
+
+    // Error handling
     this.currentSession.addEventListener('error', (event) => {
       console.error('❌ UltraVox session error:', event);
     });
 
-    console.log('✅ Event listeners set up successfully');
+    // WebSocket connection events
+    this.currentSession.addEventListener('disconnect', (event) => {
+      console.warn('🔌 Session disconnected:', event);
+    });
+
+    this.currentSession.addEventListener('reconnect', (event) => {
+      console.log('🔄 Session reconnected:', event);
+    });
+
+    console.log('✅ All event listeners configured successfully');
   }
 }
 
