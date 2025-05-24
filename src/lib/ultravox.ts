@@ -89,7 +89,7 @@ export class UltraVoxFlowService {
 
     // Generate initial system prompt and tools for the start node
     const systemPrompt = this.generateSystemPromptForNode(startNode);
-    const selectedTools = this.generateToolsForNode(startNode, flowData);
+    const selectedTools = this.generateToolsForNode(startNode);
     
     // Create call config with Call Stages support
     const callConfig = {
@@ -363,7 +363,7 @@ Node ID: ${node.id}
 CUSTOM INSTRUCTIONS:
 ${node.data.customPrompt}
 
-You have access to a 'changeStage' tool to transition to the next step in the conversation flow.`;
+You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool, always include the user's response in the 'userResponse' parameter.`;
       return customPromptBase;
     }
 
@@ -380,14 +380,14 @@ Node ID: ${node.id}
         
 You are starting a new conversation. ${node.data.content || 'Welcome! How can I help you today?'}
 
-Use the 'changeStage' tool when you need to move to the next step in the conversation.`;
+Use the 'changeStage' tool when you need to move to the next step in the conversation. The tool will automatically determine the correct next node. Include any user response in the 'userResponse' parameter.`;
 
       case 'message':
         return `${basePrompt}
         
 Deliver this message to the user: "${node.data.content || node.data.label}"
 
-After delivering the message, use the 'changeStage' tool to move to the next step.`;
+After delivering the message, use the 'changeStage' tool to move to the next step. The tool will automatically determine the next node.`;
 
       case 'question':
         const options = node.data.options?.map(opt => opt.text).join(', ') || '';
@@ -396,37 +396,30 @@ After delivering the message, use the 'changeStage' tool to move to the next ste
 Ask the user this question: "${node.data.question || node.data.content}"
 ${options ? `Available options: ${options}` : ''}
 
-When you receive their response, use the 'changeStage' tool with their answer to proceed.`;
+When you receive their response, use the 'changeStage' tool with their answer in the 'userResponse' parameter. The tool will automatically determine the appropriate next node based on their response.`;
 
       case 'condition':
         return `${basePrompt}
-        
-This is a conditional node that evaluates user responses.
-Condition: ${node.data.condition?.operator} "${node.data.condition?.value}"
 
-Use the 'evaluateCondition' tool to determine the next step based on the condition.`;
+This is a conditional node that evaluates user responses.
+Condition: ${node.data?.condition?.operator || 'equals'} "${node.data?.condition?.value || ''}"
+
+When you receive a user response, use the 'changeStage' tool and include the user's exact response in the 'userResponse' parameter. The system will automatically evaluate the condition and navigate to the appropriate next node.`;
 
       default:
-        return basePrompt;
+        return `${basePrompt}
+
+Process this node and use the 'changeStage' tool to continue the conversation flow. Always include any user response in the 'userResponse' parameter. The tool will automatically determine the next node.`;
     }
   }
 
-  private generateToolsForNode(node: FlowNode, flowData: FlowData): SelectedTool[] {
+  private generateToolsForNode(node: FlowNode): SelectedTool[] {
     const tools: SelectedTool[] = [
       {
         temporaryTool: {
           modelToolName: 'changeStage',
-          description: 'Transition to a new stage in the conversation flow',
+          description: 'Transition to the next stage in the conversation flow',
           dynamicParameters: [
-            {
-              name: 'nodeId',
-              location: 'PARAMETER_LOCATION_BODY',
-              schema: {
-                type: 'string',
-                description: 'The ID of the target node to transition to'
-              },
-              required: true
-            },
             {
               name: 'userResponse',
               location: 'PARAMETER_LOCATION_BODY',
@@ -435,28 +428,10 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
                 description: 'The user\'s response that triggered this transition'
               },
               required: false
-            },
-            {
-              name: 'callId',
-              location: 'PARAMETER_LOCATION_BODY',
-              schema: {
-                type: 'string',
-                description: 'The call ID for this conversation'
-              },
-              required: false
-            },
-            {
-              name: 'flowData',
-              location: 'PARAMETER_LOCATION_BODY',
-              schema: {
-                type: 'object',
-                description: `The complete flow data including ${flowData.nodes.length} nodes and ${flowData.edges.length} edges`
-              },
-              required: false
             }
           ],
           http: {
-            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/stage-change`,
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/navigate`,
             httpMethod: 'POST'
           }
         }
@@ -517,7 +492,7 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     // Register stage change tool - this will be called by the agent
     this.currentSession.registerToolImplementation('changeStage', async (parameters) => {
       const { nodeId, userResponse, callId } = parameters as { 
-        nodeId: string; 
+        nodeId?: string; 
         userResponse?: string;
         callId?: string;
       };
@@ -528,14 +503,31 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
         throw new Error('No execution context available');
       }
 
+      let targetNodeId = nodeId;
+
+      // If no specific nodeId provided, try to determine next node based on current node and flow structure
+      if (!targetNodeId) {
+        targetNodeId = this.determineNextNode(userResponse);
+      }
+
+      if (!targetNodeId) {
+        throw new Error('Unable to determine target node for navigation');
+      }
+
+      // Validate that the target node exists
+      const targetNode = this.executionContext.flowData.nodes.find(n => n.id === targetNodeId);
+      if (!targetNode) {
+        throw new Error(`Target node ${targetNodeId} not found in flow`);
+      }
+
       const transition: StageTransition = {
-        toNodeId: nodeId,
+        toNodeId: targetNodeId,
         trigger: 'tool_call',
         data: userResponse ? { lastUserResponse: userResponse } : undefined
       };
 
       await this.transitionToStage(transition);
-      return `Successfully navigated to node ${nodeId}`;
+      return `Successfully navigated to node ${targetNodeId}`;
     });
 
     // Register condition evaluation tool
@@ -595,6 +587,50 @@ Use the 'evaluateCondition' tool to determine the next step based on the conditi
     });
 
     console.log('✅ Call Stages tools registered successfully');
+  }
+
+  /**
+   * Determine the next node to navigate to based on current context and user response
+   */
+  private determineNextNode(userResponse?: string): string | undefined {
+    if (!this.executionContext) return undefined;
+
+    const currentNode = this.executionContext.flowData.nodes.find(
+      n => n.id === this.executionContext!.currentNodeId
+    );
+
+    if (!currentNode) return undefined;
+
+    // Find edges from current node
+    const edges = this.executionContext.flowData.edges.filter(
+      e => e.source === currentNode.id
+    );
+
+    if (edges.length === 0) return undefined;
+
+    // For condition nodes, evaluate the condition and pick appropriate edge
+    if (currentNode.type === 'condition') {
+      const condition = currentNode.data?.condition;
+      if (condition && userResponse) {
+        let conditionMet = false;
+        
+        switch (condition.operator) {
+          case 'equals':
+            conditionMet = userResponse.toLowerCase().trim() === condition.value.toLowerCase().trim();
+            break;
+          case 'contains':
+            conditionMet = userResponse.toLowerCase().includes(condition.value.toLowerCase());
+            break;
+        }
+
+        // Use first edge for true condition, second for false
+        const targetEdge = edges[conditionMet ? 0 : 1] || edges[0];
+        return targetEdge?.target || undefined;
+      }
+    }
+
+    // For other node types, just use the first available edge
+    return edges[0]?.target || undefined;
   }
 
   private setupSessionEventListeners(): void {

@@ -2,24 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { nodeId, userResponse } = await request.json();
+    const { userResponse } = await request.json();
 
-    if (!nodeId) {
-      return NextResponse.json(
-        { error: 'Node ID is required' },
-        { status: 400 }
-      );
-    }
+    console.log('🔄 Navigate tool called (HTTP fallback):', { userResponse });
 
-    // For now, we'll just return a success response
-    // In a real implementation, you might want to store the navigation
-    // or trigger additional logic
-    console.log(`Flow navigation: Moving to node ${nodeId}`, { userResponse });
-
+    // This is a fallback HTTP endpoint. The actual navigation logic 
+    // is handled by the client-side tool implementation in ultravox.ts
+    // We just return success here to satisfy UltraVox's tool requirements
+    
     return NextResponse.json({
       success: true,
-      nodeId,
-      message: `Successfully navigated to node ${nodeId}`,
+      message: 'Navigation handled by client-side implementation',
       userResponse
     });
 

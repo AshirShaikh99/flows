@@ -48,21 +48,50 @@ export async function POST(request: NextRequest) {
     const body: StageChangeRequest = await request.json();
     const { nodeId, callId, userResponse, flowData } = body;
 
-    console.log('Stage change tool called:', { nodeId, callId, userResponse });
+    console.log('Stage change tool called:', { nodeId, callId, userResponse, hasFlowData: !!flowData });
 
     if (!nodeId || !callId) {
+      console.error('Missing required parameters:', { nodeId: !!nodeId, callId: !!callId });
       return NextResponse.json(
         { error: 'nodeId and callId are required' },
         { status: 400 }
       );
     }
 
+    // Check if flowData is provided
+    if (!flowData || !flowData.nodes || flowData.nodes.length === 0) {
+      console.error('FlowData not provided or empty:', { 
+        hasFlowData: !!flowData, 
+        hasNodes: !!flowData?.nodes, 
+        nodeCount: flowData?.nodes?.length || 0 
+      });
+      return NextResponse.json(
+        { error: 'Flow data is required and must contain nodes' },
+        { status: 400 }
+      );
+    }
+
+    console.log('FlowData details:', { 
+      nodeCount: flowData.nodes.length, 
+      edgeCount: flowData.edges.length,
+      nodeIds: flowData.nodes.map(n => n.id),
+      targetNodeId: nodeId
+    });
+
     // Find the target node in the flow data
-    const targetNode = flowData?.nodes?.find((n: FlowNode) => n.id === nodeId);
+    const targetNode = flowData.nodes.find((n: FlowNode) => n.id === nodeId);
     
     if (!targetNode) {
+      console.error(`Node ${nodeId} not found in flow`, {
+        searchedNodeId: nodeId,
+        availableNodes: flowData.nodes.map(n => ({ id: n.id, type: n.type }))
+      });
       return NextResponse.json(
-        { error: `Node ${nodeId} not found in flow` },
+        { 
+          error: `Node ${nodeId} not found in flow`,
+          availableNodes: flowData.nodes.map(n => n.id),
+          searchedNodeId: nodeId
+        },
         { status: 404 }
       );
     }
@@ -70,7 +99,7 @@ export async function POST(request: NextRequest) {
     // Generate new stage configuration based on the target node
     const newStageConfig = generateStageConfig(targetNode, userResponse);
 
-    console.log('Generated stage config:', newStageConfig);
+    console.log('Generated stage config for node:', { nodeId, nodeType: targetNode.type });
 
     // Return the new stage configuration with the correct response type header
     const response = NextResponse.json(newStageConfig, { status: 200 });
