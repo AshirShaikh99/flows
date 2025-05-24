@@ -87,7 +87,7 @@ export default function UltraVoxCallManager({
 
     // Handle debug messages
     const handleDebugMessage = (event: Event) => {
-      const experimentalEvent = event as any; // UltraVoxExperimentalMessageEvent
+      const experimentalEvent = event as { message?: unknown }; // UltraVoxExperimentalMessageEvent
       const message = experimentalEvent.message || event;
       setDebugMessages(prev => [...prev.slice(-9), JSON.stringify(message)]);
     };
@@ -115,18 +115,6 @@ export default function UltraVoxCallManager({
     setError(null);
 
     try {
-      // Check microphone permissions first
-      console.log('🎤 Checking microphone permissions...');
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop()); // Clean up
-        console.log('✅ Microphone permission granted');
-      } catch (permError) {
-        console.warn('⚠️ Microphone permission denied:', permError);
-        setError('Microphone access is required for voice calls. Please allow microphone access and try again.');
-        return;
-      }
-
       // Validate flow data
       if (!flowData.nodes.length) {
         throw new Error('Flow must have at least one node');
@@ -148,9 +136,6 @@ export default function UltraVoxCallManager({
       await ultravoxServiceRef.current.joinCall(call.joinUrl);
       console.log('✅ Successfully joined call');
 
-      // Wait for session to stabilize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       setIsCallActive(true);
       setCallStatus('STATUS_ACTIVE');
       onCallStatusChange?.('STATUS_ACTIVE');
@@ -168,30 +153,15 @@ export default function UltraVoxCallManager({
     } catch (err) {
       console.error('❌ Failed to start call:', err);
       
-      // Extract detailed error information
       let errorMessage = 'Failed to start call';
       if (err instanceof Error) {
         errorMessage = err.message;
-        
-        // Parse API response details if available
-        if (err.message.includes('Bad Request') && err.message.includes('{')) {
-          try {
-            const errorMatch = err.message.match(/\{.*\}/);
-            if (errorMatch) {
-              const errorDetails = JSON.parse(errorMatch[0]);
-              if (errorDetails.details && typeof errorDetails.details === 'string') {
-                errorMessage = `UltraVox API Error: ${errorDetails.details}`;
-              }
-            }
-          } catch (parseError) {
-            console.warn('Could not parse error details:', parseError);
-          }
-        }
       }
       
       setError(errorMessage);
-      setCallStatus('STATUS_FAILED');
-      onCallStatusChange?.('STATUS_FAILED');
+      setIsCallActive(false);
+      setCallStatus('STATUS_UNSPECIFIED');
+      onCallStatusChange?.('STATUS_UNSPECIFIED');
     } finally {
       setIsLoading(false);
     }

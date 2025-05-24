@@ -2,64 +2,50 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { callConfig, apiKey } = await request.json();
-
+    const callConfig = await request.json();
+    
+    // Get the API key from environment variables (server-side)
+    const apiKey = process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY;
+    
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API key is required' },
-        { status: 400 }
+        { error: 'Ultravox API key not configured' },
+        { status: 500 }
       );
     }
 
-    if (!callConfig) {
-      return NextResponse.json(
-        { error: 'Call configuration is required' },
-        { status: 400 }
-      );
-    }
+    console.log('Proxying request to Ultravox API...');
+    console.log('Request body:', callConfig);
 
-    // Log the call config for debugging
-    console.log('Creating UltraVox call with config:', JSON.stringify(callConfig, null, 2));
-
-    // Make the API call to Ultravox from the server side
+    // Make the request to Ultravox API from the server
     const response = await fetch('https://api.ultravox.ai/api/calls', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': apiKey
+        'X-API-Key': apiKey,
       },
-      body: JSON.stringify(callConfig)
+      body: JSON.stringify(callConfig),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Ultravox API error:', response.status, errorText);
-      console.error('Request body was:', JSON.stringify(callConfig, null, 2));
+      console.error('Ultravox API error:', errorText);
       return NextResponse.json(
-        { error: `Ultravox API error: ${response.statusText}`, details: errorText },
+        { error: `Ultravox API error: ${errorText}` },
         { status: response.status }
       );
     }
 
     const data = await response.json();
-    console.log('UltraVox API response:', JSON.stringify(data, null, 2));
+    console.log('Ultravox API complete response:', JSON.stringify(data, null, 2));
+    console.log('Ultravox call created successfully:', data.callId);
+    console.log('Join URL received:', data.joinUrl);
     
-    // Validate that we have a valid joinUrl
-    if (!data.joinUrl) {
-      console.error('No joinUrl in UltraVox response');
-      return NextResponse.json(
-        { error: 'UltraVox API did not return a joinUrl' },
-        { status: 500 }
-      );
-    }
-    
-    console.log('Valid joinUrl received:', data.joinUrl);
     return NextResponse.json(data);
-
   } catch (error) {
-    console.error('Server error creating Ultravox call:', error);
+    console.error('Error in create-call proxy:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Failed to create call' },
       { status: 500 }
     );
   }
