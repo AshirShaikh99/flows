@@ -1,6 +1,8 @@
+export type NodeType = 'start' | 'message' | 'question' | 'condition' | 'workflow' | 'conversation' | 'function' | 'call_transfer' | 'press_digit' | 'logic_split' | 'sms' | 'ending';
+
 export interface FlowNode {
   id: string;
-  type: 'start' | 'message' | 'question' | 'condition';
+  type: NodeType;
   position: { x: number; y: number };
   data: NodeData;
 }
@@ -12,11 +14,24 @@ export interface NodeData {
   question?: string;
   options?: ResponseOption[];
   condition?: Condition;
+  nodeTitle?: string;
+  systemPrompt?: string;
+  transitions?: NodeTransition[];
+  description?: string;
+}
+
+export interface NodeTransition {
+  id: string;
+  label: string;
+  condition?: string;
+  targetNodeId?: string;
+  triggerType: 'user_response' | 'condition_met' | 'timeout' | 'manual';
 }
 
 export interface ResponseOption {
   id: string;
   text: string;
+  targetNodeId?: string;
 }
 
 export interface Condition {
@@ -40,8 +55,6 @@ export interface FlowData {
   nodes: FlowNode[];
   edges: FlowEdge[];
 }
-
-export type NodeType = 'start' | 'message' | 'question' | 'condition';
 
 // UltraVox Integration Types
 export interface UltraVoxCallStage {

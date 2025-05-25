@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
-import { FlowNode, ResponseOption, NodeType, NodeData } from '../types';
+import { X, Plus, Trash2, ArrowRight } from 'lucide-react';
+import { FlowNode, ResponseOption, NodeType, NodeData, NodeTransition } from '../types';
 
 interface ConfigPanelProps {
   selectedNode: FlowNode | null;
@@ -22,6 +22,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   const [conditionQuestionId, setConditionQuestionId] = useState('');
   const [conditionOperator, setConditionOperator] = useState<'equals' | 'contains'>('equals');
   const [conditionValue, setConditionValue] = useState('');
+  const [nodeTitle, setNodeTitle] = useState('');
+  const [systemPrompt, setSystemPrompt] = useState('');
+  const [transitions, setTransitions] = useState<NodeTransition[]>([]);
 
   useEffect(() => {
     if (selectedNode) {
@@ -32,6 +35,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       setConditionQuestionId(selectedNode.data.condition?.questionNodeId || '');
       setConditionOperator(selectedNode.data.condition?.operator || 'equals');
       setConditionValue(selectedNode.data.condition?.value || '');
+      setNodeTitle(selectedNode.data.nodeTitle || '');
+      setSystemPrompt(selectedNode.data.systemPrompt || '');
+      setTransitions(selectedNode.data.transitions || []);
     }
   }, [selectedNode]);
 
@@ -62,6 +68,22 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
           operator: conditionOperator,
           value: conditionValue
         };
+        break;
+      case 'workflow':
+        updatedData.nodeTitle = nodeTitle;
+        updatedData.content = content;
+        updatedData.systemPrompt = systemPrompt;
+        updatedData.transitions = transitions;
+        break;
+      case 'conversation':
+      case 'function':
+      case 'call_transfer':
+      case 'press_digit':
+      case 'logic_split':
+      case 'sms':
+      case 'ending':
+        updatedData.nodeTitle = nodeTitle;
+        updatedData.content = content;
         break;
     }
 
@@ -94,8 +116,45 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       case 'message': return 'Message Node';
       case 'question': return 'Question Node';
       case 'condition': return 'Condition Node';
+      case 'workflow': return 'Workflow Node';
+      case 'conversation': return 'Conversation Node';
+      case 'function': return 'Function Node';
+      case 'call_transfer': return 'Call Transfer Node';
+      case 'press_digit': return 'Press Digit Node';
+      case 'logic_split': return 'Logic Split Node';
+      case 'sms': return 'SMS Node';
+      case 'ending': return 'Ending Node';
       default: return 'Node';
     }
+  };
+
+  const addTransition = () => {
+    const newTransition: NodeTransition = {
+      id: `transition-${Date.now()}`,
+      label: '',
+      triggerType: 'user_response'
+    };
+    const updatedTransitions = [...transitions, newTransition];
+    setTransitions(updatedTransitions);
+    // Immediately save the updated transitions
+    if (selectedNode) {
+      onNodeUpdate(selectedNode.id, { transitions: updatedTransitions });
+    }
+  };
+
+  const removeTransition = (transitionId: string) => {
+    const updatedTransitions = transitions.filter(t => t.id !== transitionId);
+    setTransitions(updatedTransitions);
+    // Immediately save the updated transitions
+    if (selectedNode) {
+      onNodeUpdate(selectedNode.id, { transitions: updatedTransitions });
+    }
+  };
+
+  const updateTransition = (transitionId: string, updates: Partial<NodeTransition>) => {
+    setTransitions(transitions.map(t => 
+      t.id === transitionId ? { ...t, ...updates } : t
+    ));
   };
 
   return (
@@ -146,6 +205,42 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onBlur={handleSave}
                 placeholder="Enter the message content..."
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                rows={4}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                {content.length} characters
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Configuration for new conversation node types */}
+        {(['conversation', 'function', 'call_transfer', 'press_digit', 'logic_split', 'sms', 'ending'].includes(selectedNode.type)) && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Node Title
+              </label>
+              <input
+                type="text"
+                value={nodeTitle}
+                onChange={(e) => setNodeTitle(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter node title..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Content/Instructions
+              </label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter the content or instructions for this node..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
                 rows={4}
               />
               <div className="text-xs text-gray-500 mt-1">
@@ -287,6 +382,105 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="Enter comparison value..."
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
               />
+            </div>
+          </div>
+        )}
+
+        {selectedNode.type === 'workflow' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Node Title
+              </label>
+              <input
+                type="text"
+                value={nodeTitle}
+                onChange={(e) => setNodeTitle(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter node title..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Content/Instructions
+              </label>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter the content or instructions for this node..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                System Prompt (Optional)
+              </label>
+              <textarea
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter system prompt for this node..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  <ArrowRight className="w-4 h-4 inline mr-1" />
+                  Transitions
+                </label>
+                <button
+                  onClick={addTransition}
+                  className="p-1 text-indigo-600 hover:bg-indigo-50 rounded"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {transitions.map((transition) => (
+                  <div key={transition.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                    <input
+                      type="text"
+                      value={transition.label}
+                      onChange={(e) => updateTransition(transition.id, { label: e.target.value })}
+                      onBlur={handleSave}
+                      placeholder="Transition label..."
+                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    />
+                    <select
+                      value={transition.triggerType}
+                      onChange={(e) => updateTransition(transition.id, { triggerType: e.target.value as 'user_response' | 'condition_met' | 'timeout' | 'manual' })}
+                      onBlur={handleSave}
+                      className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                    >
+                      <option value="user_response">User Response</option>
+                      <option value="condition_met">Condition Met</option>
+                      <option value="timeout">Timeout</option>
+                      <option value="manual">Manual</option>
+                    </select>
+                    <button
+                      onClick={() => removeTransition(transition.id)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              {transitions.length === 0 && (
+                <div className="text-sm text-gray-500 italic p-2 bg-gray-50 rounded">
+                  No transitions configured. Add transitions to define how the conversation flows from this node.
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -23,6 +23,8 @@ import StartNode from './nodes/StartNode';
 import MessageNode from './nodes/MessageNode';
 import QuestionNode from './nodes/QuestionNode';
 import ConditionNode from './nodes/ConditionNode';
+import WorkflowNode from './nodes/WorkflowNode';
+import ConversationNode from './nodes/ConversationNode';
 import { FlowNode, FlowData, NodeType, NodeData, CallStatus } from '../types';
 import { useFlowContext, useCallStages } from '../lib/flow-context';
 
@@ -31,17 +33,17 @@ const nodeTypes: NodeTypes = {
   message: MessageNode,
   question: QuestionNode,
   condition: ConditionNode,
+  workflow: WorkflowNode,
+  conversation: ConversationNode,
+  function: ConversationNode,
+  call_transfer: ConversationNode,
+  press_digit: ConversationNode,
+  logic_split: ConversationNode,
+  sms: ConversationNode,
+  ending: ConversationNode,
 };
 
-const initialNodes: Node[] = [
-  {
-    id: 'start-1',
-    type: 'start',
-    position: { x: 100, y: 100 },
-    data: { label: 'Start' },
-    deletable: false,
-  },
-];
+const initialNodes: Node[] = [];
 
 const FlowBuilder: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -49,6 +51,8 @@ const FlowBuilder: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
   const [showUltraVoxPanel, setShowUltraVoxPanel] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
@@ -148,12 +152,105 @@ const FlowBuilder: React.FC = () => {
 
   const getDefaultNodeData = (type: NodeType): NodeData => {
     switch (type) {
+      case 'conversation':
+        return { 
+          content: 'Say Hello to {{customer_name}}, and ask the user if now is a good time to talk.',
+          nodeTitle: 'Conversation Node',
+          transitions: [
+            {
+              id: `transition-continue-${Date.now()}`,
+              label: 'Continue conversation',
+              triggerType: 'user_response'
+            }
+          ]
+        };
+      case 'function':
+        return { 
+          content: 'Execute custom function or API call',
+          nodeTitle: 'Function Node'
+        };
+      case 'call_transfer':
+        return { 
+          content: 'Transfer call to human agent or another number',
+          nodeTitle: 'Call Transfer'
+        };
+      case 'press_digit':
+        return { 
+          content: 'Wait for user to press a digit on keypad',
+          nodeTitle: 'Press Digit'
+        };
+      case 'logic_split':
+        return { 
+          content: 'Branch conversation based on conditions',
+          nodeTitle: 'Logic Split Node',
+          condition: { operator: 'contains' as const, value: 'yes' },
+          transitions: [
+            {
+              id: `transition-yes-${Date.now()}-1`,
+              label: 'Yes',
+              triggerType: 'condition_met'
+            },
+            {
+              id: `transition-no-${Date.now()}-2`,
+              label: 'No',
+              triggerType: 'condition_met'
+            }
+          ]
+        };
+      case 'sms':
+        return { 
+          content: 'Send SMS message to user',
+          nodeTitle: 'SMS'
+        };
+      case 'ending':
+        return { 
+          content: 'End the conversation gracefully',
+          nodeTitle: 'Ending'
+        };
+      // Keep legacy support for existing node types
+      case 'start':
+        return { 
+          nodeTitle: 'Start',
+          content: ''
+        };
       case 'message':
-        return { content: '' };
+        return { 
+          content: 'Thank you for your interest! Let me help you with that.',
+          nodeTitle: 'Message Node'
+        };
       case 'question':
-        return { question: '', options: [] };
+        const timestamp = Date.now();
+        return { 
+          question: 'How can I assist you today?', 
+          options: [
+            { id: `option-${timestamp}-1`, text: 'I need product information' },
+            { id: `option-${timestamp}-2`, text: 'I have a technical issue' },
+            { id: `option-${timestamp}-3`, text: 'I want to make a purchase' }
+          ],
+          nodeTitle: 'Question Node'
+        };
       case 'condition':
-        return { condition: { operator: 'equals', value: '' } };
+        return { 
+          condition: { operator: 'contains' as const, value: 'yes' },
+          nodeTitle: 'Condition Node'
+        };
+      case 'workflow':
+        return { 
+          nodeTitle: 'Workflow Node',
+          content: 'Say Hello to {{customer_name}}, and ask the user if now is a good time to talk.',
+          transitions: [
+            {
+              id: `transition-free-${Date.now()}-1`,
+              label: 'user is free',
+              triggerType: 'user_response'
+            },
+            {
+              id: `transition-busy-${Date.now()}-2`,
+              label: 'user is busy',
+              triggerType: 'user_response'
+            }
+          ]
+        };
       default:
         return {};
     }
@@ -177,14 +274,22 @@ const FlowBuilder: React.FC = () => {
     );
   }, [setNodes]);
 
+  const showToastMessage = useCallback((message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => {
+      setShowToast(false);
+    }, 3000);
+  }, []);
+
   const saveFlow = useCallback(() => {
     const flowData: FlowData = {
       nodes: nodes as FlowNode[],
       edges: edges,
     };
     localStorage.setItem('conversation-flow', JSON.stringify(flowData));
-    alert('Flow saved successfully!');
-  }, [nodes, edges]);
+    showToastMessage('Flow saved successfully!');
+  }, [nodes, edges, showToastMessage]);
 
   const exportFlow = useCallback(() => {
     const flowData = {
@@ -236,10 +341,10 @@ const FlowBuilder: React.FC = () => {
       
       <div className="flex-1 relative">
         {/* Top toolbar */}
-        <div className="absolute top-4 left-4 z-10 flex gap-2">
+        <div className="absolute top-4 left-4 z-10 flex gap-3">
           <button
             onClick={saveFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition-all duration-200 shadow-sm hover:shadow-md"
             title="Save Flow"
           >
             <Save className="w-4 h-4" />
@@ -248,7 +353,7 @@ const FlowBuilder: React.FC = () => {
           
           <button
             onClick={exportFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-all duration-200 shadow-sm hover:shadow-md"
             title="Export Flow"
           >
             <Download className="w-4 h-4" />
@@ -257,7 +362,7 @@ const FlowBuilder: React.FC = () => {
           
           <button
             onClick={resetView}
-            className="flex items-center gap-2 px-3 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
             title="Reset View"
           >
             <RotateCcw className="w-4 h-4" />
@@ -266,7 +371,7 @@ const FlowBuilder: React.FC = () => {
           
           <button
             onClick={clearFlow}
-            className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-all duration-200 shadow-sm hover:shadow-md"
             title="Clear Flow"
           >
             <Trash2 className="w-4 h-4" />
@@ -278,10 +383,10 @@ const FlowBuilder: React.FC = () => {
         <div className="absolute top-4 right-4 z-10">
           <button
             onClick={() => setShowUltraVoxPanel(!showUltraVoxPanel)}
-            className={`px-4 py-2 rounded-md transition-colors ${
+            className={`px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md ${
               showUltraVoxPanel
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                ? 'bg-rose-500 text-white hover:bg-rose-600'
+                : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
             }`}
           >
             {showUltraVoxPanel ? 'Hide' : 'Show'} Call Manager
@@ -355,6 +460,14 @@ const FlowBuilder: React.FC = () => {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {showToast && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-white border border-rose-200 rounded-lg shadow-lg px-4 py-3 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="w-2 h-2 bg-rose-500 rounded-full"></div>
+          <span className="text-gray-700 font-medium">{toastMessage}</span>
         </div>
       )}
     </div>

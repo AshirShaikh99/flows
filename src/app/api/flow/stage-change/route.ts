@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FlowNode, ResponseOption } from '../../../../types';
+import { FlowNode, ResponseOption, NodeType } from '../../../../types';
 
 interface StageChangeRequest {
   nodeId: string;
@@ -185,6 +185,56 @@ This is a conditional node that evaluates user responses.
 Condition: ${node.data?.condition?.operator || 'equals'} "${node.data?.condition?.value || ''}"
 
 Evaluate the user's response against this condition and use the 'changeStage' tool to move to the appropriate next node based on whether the condition is met or not.`;
+
+    case 'conversation':
+      return `${basePrompt}
+
+${node.data?.content || 'Continue the conversation with the user.'}
+
+Use the 'changeStage' tool when you need to move to the next step in the conversation.`;
+
+    case 'function':
+      return `${basePrompt}
+
+Execute the function described: ${node.data?.content || 'Function not configured'}
+
+Use the 'changeStage' tool to continue after executing the function.`;
+
+    case 'call_transfer':
+      return `${basePrompt}
+
+${node.data?.content || 'Transfer the call to another agent or number.'}
+
+Use the 'changeStage' tool to continue after the transfer is complete.`;
+
+    case 'press_digit':
+      return `${basePrompt}
+
+${node.data?.content || 'Wait for the user to press a digit on their keypad.'}
+
+Use the 'changeStage' tool when the user provides digit input.`;
+
+    case 'logic_split':
+      return `${basePrompt}
+
+This is a logic split node that branches the conversation based on conditions.
+${node.data?.content || 'Evaluate conditions to determine the next path.'}
+
+Use the 'changeStage' tool with the appropriate target node based on the logic evaluation.`;
+
+    case 'sms':
+      return `${basePrompt}
+
+${node.data?.content || 'Send an SMS message to the user.'}
+
+Use the 'changeStage' tool to continue after sending the SMS.`;
+
+    case 'ending':
+      return `${basePrompt}
+
+${node.data?.content || 'End the conversation gracefully.'}
+
+This is the final node. Conclude the conversation professionally and don't use the changeStage tool.`;
 
     default:
       return `${basePrompt}

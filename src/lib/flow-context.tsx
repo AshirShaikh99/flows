@@ -1,7 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useReducer, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, ReactNode, useMemo } from 'react';
 import { FlowData, FlowNode, CallStatus, UltraVoxCallStage } from '../types';
+import { TransitionManager, TransitionContext } from './transition-manager';
 
 // Flow State Interface
 interface FlowState {
@@ -105,6 +106,11 @@ interface FlowContextType {
   updateVariables: (variables: Record<string, unknown>) => void;
   resetFlow: () => void;
   
+  // Transition management
+  transitionToNextNode: (context: TransitionContext) => string | null;
+  getPossibleNextNodes: (nodeId: string) => FlowNode[];
+  validateFlow: () => { isValid: boolean; errors: string[] };
+  
   // Getters
   getCurrentNode: () => FlowNode | null;
   getNodeById: (id: string) => FlowNode | null;
@@ -122,6 +128,9 @@ interface FlowProviderProps {
 // Context Provider Component
 export function FlowProvider({ children }: FlowProviderProps) {
   const [state, dispatch] = useReducer(flowReducer, initialState);
+
+  // Create transition manager instance
+  const transitionManager = useMemo(() => new TransitionManager(state.flowData), [state.flowData]);
 
   // Helper functions
   const setFlowData = useCallback((flowData: FlowData) => {
@@ -164,6 +173,23 @@ export function FlowProvider({ children }: FlowProviderProps) {
     return state.currentStageId === nodeId;
   }, [state.currentStageId]);
 
+  // Transition management functions
+  const transitionToNextNode = useCallback((context: TransitionContext): string | null => {
+    const nextNodeId = transitionManager.getNextNodeId(context);
+    if (nextNodeId) {
+      transitionToStage(nextNodeId);
+    }
+    return nextNodeId;
+  }, [transitionManager, transitionToStage]);
+
+  const getPossibleNextNodes = useCallback((nodeId: string): FlowNode[] => {
+    return transitionManager.getPossibleNextNodes(nodeId);
+  }, [transitionManager]);
+
+  const validateFlow = useCallback(() => {
+    return transitionManager.validateFlow();
+  }, [transitionManager]);
+
   const contextValue: FlowContextType = {
     state,
     dispatch,
@@ -173,6 +199,9 @@ export function FlowProvider({ children }: FlowProviderProps) {
     setCallActive,
     updateVariables,
     resetFlow,
+    transitionToNextNode,
+    getPossibleNextNodes,
+    validateFlow,
     getCurrentNode,
     getNodeById,
     isNodeActive,

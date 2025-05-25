@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, HelpCircle, GitBranch } from 'lucide-react';
+import { Hash, Settings, Phone, Grid3X3, Split, MessageCircle, Square, Play, Workflow } from 'lucide-react';
 import { NodeType } from '../types';
 
 interface NodeSidebarProps {
@@ -9,33 +9,75 @@ interface NodeSidebarProps {
 const NodeSidebar: React.FC<NodeSidebarProps> = ({ onDragStart }) => {
   const nodeTypes = [
     {
-      type: 'message' as NodeType,
-      label: 'Message',
-      icon: MessageSquare,
-      color: 'bg-blue-500',
-      description: 'Display AI messages'
+      type: 'start' as NodeType,
+      label: 'Start',
+      icon: Play,
+      color: 'text-green-600',
+      description: 'Begin the conversation flow'
     },
     {
-      type: 'question' as NodeType,
-      label: 'Question',
-      icon: HelpCircle,
-      color: 'bg-purple-500',
-      description: 'Ask user questions'
+      type: 'workflow' as NodeType,
+      label: 'Workflow Node',
+      icon: Workflow,
+      color: 'text-indigo-600',
+      description: 'Node with transition management'
     },
     {
-      type: 'condition' as NodeType,
-      label: 'Condition',
-      icon: GitBranch,
-      color: 'bg-yellow-500',
-      description: 'Branch based on answers'
+      type: 'conversation' as NodeType,
+      label: 'Conversation',
+      icon: Hash,
+      color: 'text-purple-600',
+      description: 'Basic conversation node'
+    },
+    {
+      type: 'function' as NodeType,
+      label: 'Function',
+      icon: Settings,
+      color: 'text-purple-600',
+      description: 'Execute custom function'
+    },
+    {
+      type: 'call_transfer' as NodeType,
+      label: 'Call Transfer',
+      icon: Phone,
+      color: 'text-orange-600',
+      description: 'Transfer call to another agent'
+    },
+    {
+      type: 'press_digit' as NodeType,
+      label: 'Press Digit',
+      icon: Grid3X3,
+      color: 'text-blue-600',
+      description: 'Handle digit input'
+    },
+    {
+      type: 'logic_split' as NodeType,
+      label: 'Logic Split Node',
+      icon: Split,
+      color: 'text-blue-600',
+      description: 'Conditional logic branching'
+    },
+    {
+      type: 'sms' as NodeType,
+      label: 'SMS',
+      icon: MessageCircle,
+      color: 'text-yellow-600',
+      description: 'Send SMS message'
+    },
+    {
+      type: 'ending' as NodeType,
+      label: 'Ending',
+      icon: Square,
+      color: 'text-gray-600',
+      description: 'End the conversation'
     }
   ];
 
   return (
     <div className="w-[200px] bg-gray-50 border-r border-gray-200 p-4">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">Nodes</h3>
+      <h3 className="text-sm font-medium text-gray-500 mb-4 uppercase tracking-wide">ADD NEW NODE</h3>
       
-      <div className="space-y-3">
+      <div className="space-y-1">
         {nodeTypes.map((nodeType) => {
           const IconComponent = nodeType.icon;
           
@@ -44,26 +86,13 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ onDragStart }) => {
               key={nodeType.type}
               draggable
               onDragStart={(event) => onDragStart(event, nodeType.type)}
-              className={`${nodeType.color} rounded-lg p-3 cursor-grab active:cursor-grabbing shadow-md hover:shadow-lg transition-all transform hover:scale-105`}
+              className="flex items-center gap-3 p-3 rounded-lg cursor-grab active:cursor-grabbing hover:bg-gray-100 transition-colors group"
             >
-              <div className="flex items-center gap-2 mb-1">
-                <IconComponent className="w-4 h-4 text-white" />
-                <span className="text-white text-sm font-medium">{nodeType.label}</span>
-              </div>
-              <p className="text-white text-xs opacity-90">{nodeType.description}</p>
+              <IconComponent className={`w-4 h-4 ${nodeType.color}`} />
+              <span className="text-gray-700 text-sm font-medium">{nodeType.label}</span>
             </div>
           );
         })}
-      </div>
-      
-      <div className="mt-6 p-3 bg-gray-100 rounded-lg">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">How to use:</h4>
-        <ol className="text-xs text-gray-600 space-y-1">
-          <li>1. Drag nodes to canvas</li>
-          <li>2. Connect nodes by dragging between handles</li>
-          <li>3. Click nodes to configure</li>
-          <li>4. Build your conversation flow</li>
-        </ol>
       </div>
     </div>
   );
