@@ -144,7 +144,7 @@ export default function UltraVoxCallManager({
       
       // Create call
       const call = await ultravoxServiceRef.current.createCall(flowData);
-      console.log('✅ Call created:', call.id);
+      console.log('✅ Call created:', call.callId);
       
       // Join call
       await ultravoxServiceRef.current.joinCall(call.joinUrl);
@@ -155,7 +155,7 @@ export default function UltraVoxCallManager({
       onCallStatusChange?.('STATUS_ACTIVE');
       
       setDebugMessages(prev => [...prev, 
-        `Call created: ${call.id}`,
+        `Call created: ${call.callId}`,
         `Started at node: ${startNode.id} (${startNode.type})`,
         'Call is now active'
       ]);

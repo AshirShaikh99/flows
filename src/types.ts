@@ -137,7 +137,7 @@ export interface GenericVoice {
 }
 
 export interface UltraVoxCall {
-  id: string;
+  callId: string;
   created: string;
   ended?: string;
   model: string;

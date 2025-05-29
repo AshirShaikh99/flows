@@ -47,9 +47,13 @@ export class UltraVoxFlowService {
   private currentSession: UltravoxSession | null = null;
   private executionContext: FlowExecutionContext | null = null;
   private stageChangeCallback?: (nodeId: string) => void;
+  private instanceId: string;
+  private currentCallId: string | null = null; // Add explicit call ID storage
 
   constructor(apiKey: string) {
     this.apiKey = apiKey;
+    this.instanceId = `service-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    console.log('🏗️ UltraVoxFlowService instance created:', this.instanceId);
   }
 
   /**
@@ -178,7 +182,8 @@ export class UltraVoxFlowService {
 
       console.log('✅ Valid call object created with Call Stages support');
 
-      // Initialize execution context with the actual call object and initial node
+      // CRITICAL FIX: Initialize execution context BEFORE registering flow data
+      // This ensures the call ID is available when changeStage tool is called
       this.executionContext = {
         flowData,
         currentNodeId: initialNode.id,
@@ -187,9 +192,22 @@ export class UltraVoxFlowService {
         ultravoxCall: call
       };
 
+      // Store call ID explicitly for reliable access
+      this.currentCallId = call.callId;
+
+      console.log('📝 Execution context initialized with call ID:', call.callId);
+      console.log('🔍 Execution context validation:', {
+        hasExecutionContext: !!this.executionContext,
+        contextCallId: this.executionContext.ultravoxCall?.callId,
+        contextCurrentNode: this.executionContext.currentNodeId,
+        callIdMatch: this.executionContext.ultravoxCall?.callId === call.callId,
+        serviceInstance: this.instanceId,
+        explicitCallId: this.currentCallId
+      });
+
       // Now register flow data with the actual call ID
-      console.log('📝 Registering flow data with call ID:', call.id);
-      await this.registerFlowData(call.id, flowData);
+      console.log('📝 Registering flow data with call ID:', call.callId);
+      await this.registerFlowData(call.callId, flowData);
 
       return call;
 
@@ -207,6 +225,12 @@ export class UltraVoxFlowService {
    */
   async joinCall(joinUrl: string): Promise<void> {
     console.log('🔊 Attempting to join call with Call Stages support:', joinUrl);
+    console.log('🔍 Join call execution context check:', {
+      hasExecutionContext: !!this.executionContext,
+      contextCallId: this.executionContext?.ultravoxCall?.callId,
+      contextCurrentNode: this.executionContext?.currentNodeId,
+      serviceInstance: this.instanceId
+    });
     
     // Validate joinUrl
     if (!joinUrl || typeof joinUrl !== 'string' || !joinUrl.startsWith('wss://')) {
@@ -290,7 +314,7 @@ export class UltraVoxFlowService {
       return null;
     }
 
-    const callId = this.executionContext.ultravoxCall.id;
+    const callId = this.executionContext.ultravoxCall.callId;
     const stages = await this.getCallStages(callId);
     
     return stages.length > 0 ? stages[stages.length - 1] : null;
@@ -365,6 +389,7 @@ export class UltraVoxFlowService {
     
     // Always clean up execution context
     this.executionContext = null;
+    this.currentCallId = null; // Clear stored call ID
     console.log('✅ Call ended and context cleared');
   }
 
@@ -532,13 +557,13 @@ The tool will automatically determine the next node.`;
               location: 'PARAMETER_LOCATION_BODY',
               schema: {
                 type: 'string',
-                description: 'The current call ID'
+                description: 'The current call ID for this conversation'
               },
-              required: false
+              required: true
             }
           ],
           http: {
-            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/navigate`,
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/simple-navigate`,
             httpMethod: 'POST'
           }
         }
@@ -598,24 +623,61 @@ The tool will automatically determine the next node.`;
 
     // Register stage change tool - this will be called by the agent
     this.currentSession.registerToolImplementation('changeStage', async (parameters) => {
+      console.log('🚨 changeStage tool called - FIXED VERSION 3.0');
+      console.log('🔍 Service instance in tool:', this.instanceId);
+      
       const { userResponse, currentNodeId } = parameters as { 
         userResponse?: string;
         currentNodeId?: string;
       };
-      
+
       console.log('🔄 changeStage tool called with parameters:', { userResponse, currentNodeId });
 
-      if (!this.executionContext) {
-        throw new Error('No execution context available');
+      // CRITICAL FIX: Get call ID from multiple sources with fallbacks
+      let actualCallId: string | null = null;
+
+      // 1. Try explicit stored call ID (most reliable)
+      if (this.currentCallId) {
+        actualCallId = this.currentCallId;
+        console.log('✅ Using stored call ID:', actualCallId);
+      }
+      // 2. Try execution context
+      else if (this.executionContext?.ultravoxCall?.callId) {
+        actualCallId = this.executionContext.ultravoxCall.callId;
+        console.log('✅ Using execution context call ID:', actualCallId);
+      }
+      // 3. Last resort: check if execution context exists but show detailed error
+      else {
+        console.error('❌ No call ID available from any source');
+        console.error('❌ Debug state:', {
+          hasExecutionContext: !!this.executionContext,
+          hasCall: !!this.executionContext?.ultravoxCall,
+          contextCallId: this.executionContext?.ultravoxCall?.callId,
+          storedCallId: this.currentCallId,
+          serviceInstance: this.instanceId
+        });
+        throw new Error('No call ID available for navigation - check execution context');
       }
 
-      // Get the actual call ID from execution context
-      const callId = this.executionContext.ultravoxCall?.id;
-      
-      console.log('📞 Using call ID from context:', callId);
+      console.log('🎯 Current node from context:', this.executionContext?.currentNodeId);
+      console.log('🎯 Current node from parameter:', currentNodeId);
+
+      // Use currentNodeId from parameter or fall back to execution context
+      const nodeId = currentNodeId || this.executionContext?.currentNodeId;
+
+      if (!nodeId) {
+        console.error('❌ No current node ID available');
+        throw new Error('No current node ID available for navigation');
+      }
 
       // Call the server-side navigation endpoint
       try {
+        console.log('🚀 Making navigation request with FIXED call ID:', {
+          userResponse,
+          callId: actualCallId,
+          currentNodeId: nodeId
+        });
+
         const response = await fetch('/api/flow/navigate', {
           method: 'POST',
           headers: {
@@ -623,28 +685,43 @@ The tool will automatically determine the next node.`;
           },
           body: JSON.stringify({ 
             userResponse, 
-            callId,
-            currentNodeId: currentNodeId || this.executionContext.currentNodeId 
+            callId: actualCallId,
+            currentNodeId: nodeId
           })
         });
 
+        console.log('📡 Navigation response status:', response.status, response.statusText);
+
         if (!response.ok) {
           const errorData = await response.json();
+          console.error('❌ Navigation failed:', response.status, response.statusText, errorData);
           throw new Error(`Navigation failed: ${response.status} - ${errorData.message || 'Unknown error'}`);
         }
 
         const navigationResult = await response.json();
         console.log('✅ Navigation successful:', navigationResult);
 
-        // Update current node ID if navigation was successful
+        // CRITICAL: Update current node ID and notify UI of stage change
         if (navigationResult.metadata?.nodeId) {
-          this.executionContext.currentNodeId = navigationResult.metadata.nodeId;
-          this.executionContext.callStageHistory.push(navigationResult.metadata.nodeId);
+          const newNodeId = navigationResult.metadata.nodeId;
+          console.log('🎯 Updating UI to show active node:', newNodeId);
+          
+          // Update execution context
+          if (this.executionContext) {
+            this.executionContext.currentNodeId = newNodeId;
+            this.executionContext.callStageHistory.push(newNodeId);
+          }
           
           // Notify UI of stage change
           if (this.stageChangeCallback) {
-            this.stageChangeCallback(navigationResult.metadata.nodeId);
+            console.log('📡 Calling stage change callback for UI update');
+            this.stageChangeCallback(newNodeId);
+          } else {
+            console.warn('⚠️ No stage change callback registered');
           }
+        } else {
+          console.warn('⚠️ No nodeId in navigation result metadata');
+          console.warn('⚠️ Navigation result structure:', Object.keys(navigationResult));
         }
 
         return navigationResult.toolResultText || 'Navigation completed successfully';
@@ -791,21 +868,45 @@ The tool will automatically determine the next node.`;
 
   private async registerFlowData(callId: string, flowData: FlowData): Promise<void> {
     try {
+      console.log('📝 Registering flow data with details:', {
+        callId,
+        nodeCount: flowData.nodes.length,
+        edgeCount: flowData.edges.length,
+        nodeTypes: flowData.nodes.map(n => n.type).join(', ')
+      });
+
+      const requestBody = { callId, flowData };
+      console.log('📝 Request body validation:', {
+        hasCallId: !!callId,
+        hasFlowData: !!flowData,
+        hasNodes: !!flowData.nodes,
+        hasEdges: !!flowData.edges,
+        callIdType: typeof callId,
+        flowDataType: typeof flowData
+      });
+
       const response = await fetch('/api/flow/navigate', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ callId, flowData })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
-        console.warn('⚠️ Failed to register flow data:', response.statusText);
+        const errorText = await response.text();
+        console.error('⚠️ Failed to register flow data:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
       } else {
-        console.log('✅ Flow data registered for call:', callId);
+        const responseText = await response.text();
+        console.log('✅ Flow data registered successfully for call:', callId);
+        console.log('✅ Response:', responseText);
       }
     } catch (error) {
-      console.warn('⚠️ Error registering flow data:', error);
+      console.error('⚠️ Error registering flow data:', error);
     }
   }
 }

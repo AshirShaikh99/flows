@@ -58,7 +58,7 @@ const FlowBuilder: React.FC = () => {
 
   // Use Flow Context
   const { setFlowData } = useFlowContext();
-  const { currentStageId, callStatus, transitionToStage, setCallStatus, setCallActive } = useCallStages();
+  const { currentStageId, callStatus, transitionToStage, setCallStatus, setCallActive, stageHistory } = useCallStages();
 
   // UltraVox API key (in production, this should come from environment variables)
   const ultravoxApiKey = process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY || '';
@@ -99,13 +99,74 @@ const FlowBuilder: React.FC = () => {
         ...node,
         style: {
           ...node.style,
-          border: node.id === currentStageId ? '3px solid #3b82f6' : '1px solid #d1d5db',
-          boxShadow: node.id === currentStageId ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : undefined,
-          backgroundColor: node.id === currentStageId ? '#eff6ff' : undefined,
+          border: node.id === currentStageId ? '4px solid #3b82f6' : '1px solid #d1d5db',
+          boxShadow: node.id === currentStageId 
+            ? '0 0 0 4px rgba(59, 130, 246, 0.2), 0 4px 12px rgba(59, 130, 246, 0.3)' 
+            : undefined,
+          backgroundColor: node.id === currentStageId ? '#dbeafe' : undefined,
+          transform: node.id === currentStageId ? 'scale(1.05)' : 'scale(1)',
+          transition: 'all 0.3s ease-in-out',
+          zIndex: node.id === currentStageId ? 1000 : 1,
         },
+        className: node.id === currentStageId ? 'active-node' : '',
       }))
     );
   }, [currentStageId, setNodes]);
+
+  // Update edge styles to show traversed paths
+  useEffect(() => {
+    if (!currentStageId) return;
+    
+    setEdges((eds) =>
+      eds.map((edge) => {
+        // Check if this edge has been traversed
+        const sourceIndex = stageHistory.indexOf(edge.source);
+        const targetIndex = stageHistory.indexOf(edge.target);
+        const isTraversed = sourceIndex !== -1 && targetIndex !== -1 && targetIndex === sourceIndex + 1;
+        const isCurrentTransition = edge.target === currentStageId;
+        
+        return {
+          ...edge,
+          style: {
+            ...edge.style,
+            stroke: isCurrentTransition 
+              ? '#3b82f6' 
+              : isTraversed 
+                ? '#60a5fa' 
+                : '#d1d5db',
+            strokeWidth: isCurrentTransition ? 4 : isTraversed ? 3 : 1,
+            strokeDasharray: isCurrentTransition ? '5 5' : 'none',
+            opacity: isTraversed || isCurrentTransition ? 1 : 0.6,
+          },
+          animated: isCurrentTransition,
+        };
+      })
+    );
+  }, [currentStageId, stageHistory, setEdges]);
+
+  // Add CSS for active node animation
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .active-node {
+        animation: pulse-glow 2s ease-in-out infinite alternate;
+      }
+      
+      @keyframes pulse-glow {
+        0% {
+          filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.5));
+        }
+        100% {
+          filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.8));
+        }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -395,12 +456,34 @@ const FlowBuilder: React.FC = () => {
 
         {/* Current Stage Indicator */}
         {currentStageId && (
-          <div className="absolute top-16 right-4 z-10 bg-blue-100 border border-blue-300 rounded-lg px-3 py-2">
-            <div className="text-sm font-medium text-blue-900">
-              Active Stage: {currentStageId}
+          <div className="absolute top-16 right-4 z-10 bg-blue-50 border-2 border-blue-300 rounded-lg px-4 py-3 shadow-lg">
+            <div className="text-sm font-bold text-blue-900 mb-1">
+              🎯 Active Node: {currentStageId}
             </div>
-            <div className="text-xs text-blue-700">
+            <div className="text-xs text-blue-700 mb-2">
               Status: {callStatus.replace('STATUS_', '')}
+            </div>
+            {(() => {
+              const activeNode = (nodes as FlowNode[]).find(n => n.id === currentStageId);
+              return activeNode ? (
+                <div className="text-xs text-blue-600">
+                  <div className="font-medium">Type: {activeNode.type}</div>
+                  {activeNode.data.customPrompt && (
+                    <div className="mt-1 text-blue-500">
+                      📝 Custom: {activeNode.data.customPrompt.substring(0, 30)}...
+                    </div>
+                  )}
+                  {activeNode.data.content && !activeNode.data.customPrompt && (
+                    <div className="mt-1 text-blue-500">
+                      💬 Content: {activeNode.data.content.substring(0, 30)}...
+                    </div>
+                  )}
+                </div>
+              ) : null;
+            })()}
+            <div className="mt-2 flex items-center text-xs text-blue-600">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse mr-2"></div>
+              Flow is active
             </div>
           </div>
         )}

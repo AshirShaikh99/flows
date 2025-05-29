@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FlowData, FlowNode } from '../../../../types';
+import { FlowData, FlowNode } from '../../../types';
+import { storeFlowData, getFlowData, getActiveFlowsCount } from '../shared-flow-data';
 
+// In-memory storage for active flow data (in production, this would be in a database)
 interface NavigateRequest {
   userResponse?: string;
   callId?: string;
@@ -29,18 +31,48 @@ interface ToolConfig {
   };
 }
 
-// In-memory store for active flows (in production, use Redis or DB)
-const activeFlows: Map<string, FlowData> = new Map();
-
 export async function POST(request: NextRequest) {
   try {
-    const { userResponse, callId, currentNodeId }: NavigateRequest = await request.json();
+    const requestData = await request.json();
+    console.log('🔄 Navigate tool called with call stages:', requestData);
 
-    console.log('🔄 Navigate tool called with call stages:', { 
-      userResponse, 
-      callId, 
-      currentNodeId
-    });
+    const { userResponse, currentNodeId, callId } = requestData;
+
+    // CRITICAL FIX: Extract call ID from multiple sources
+    let actualCallId = callId;
+
+    // If client didn't provide call ID, try to extract from UltraVox headers
+    if (!actualCallId || actualCallId === 'undefined' || actualCallId === 'new call' || actualCallId === 'new_call') {
+      // Try to get call ID from UltraVox request headers
+      const ultravoxCallId = request.headers.get('x-ultravox-call-id') || 
+                            request.headers.get('ultravox-call-id') ||
+                            request.headers.get('call-id');
+      
+      if (ultravoxCallId) {
+        actualCallId = ultravoxCallId;
+        console.log('✅ Extracted call ID from headers:', actualCallId);
+      } else {
+        // Last resort: try to find the most recent call in our flow data
+        console.log('🔍 No call ID from client or headers, checking active flows...');
+        const activeFlowsCount = getActiveFlowsCount();
+        if (activeFlowsCount === 1) {
+          // Would need to implement a function to get all keys from shared storage
+          // For now, let's handle this case differently
+          console.log('✅ Single active flow available');
+        } else {
+          console.error('❌ Cannot determine call ID. Active flows count:', activeFlowsCount);
+          return NextResponse.json(
+            { 
+              error: 'Cannot determine call ID for navigation',
+              toolResultText: 'I cannot navigate the flow without a valid call ID.'
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    console.log('🎯 Using call ID for navigation:', actualCallId);
 
     // If no currentNodeId provided, we can't determine next step
     if (!currentNodeId) {
@@ -52,17 +84,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Try to get flow data from memory (this would be from call metadata in production)
-    let activeFlowData = callId ? activeFlows.get(callId) : null;
+    // Try to get flow data from shared storage
+    let activeFlowData = actualCallId ? getFlowData(actualCallId) : null;
     
     if (!activeFlowData) {
-      console.warn('⚠️ No flow data found in memory for call:', callId);
+      console.warn('⚠️ No flow data found in shared storage for call:', actualCallId);
       
       // Try to get flow data from UltraVox call metadata
-      if (callId) {
+      if (actualCallId) {
         try {
           console.log('🔍 Attempting to retrieve flow data from call metadata...');
-          const callResponse = await fetch(`https://api.ultravox.ai/api/calls/${callId}`, {
+          const callResponse = await fetch(`https://api.ultravox.ai/api/calls/${actualCallId}`, {
             headers: {
               'X-API-Key': process.env.ULTRAVOX_API_KEY || '',
               'Content-Type': 'application/json'
@@ -81,15 +113,17 @@ export async function POST(request: NextRequest) {
               activeFlowData = JSON.parse(callData.metadata.flowData);
               console.log('✅ Successfully parsed flow data from metadata');
               console.log('📊 Flow structure:', {
-                nodeCount: activeFlowData.nodes.length,
-                workflowNodes: activeFlowData.nodes.filter(n => n.type === 'workflow').length,
-                workflowNodesWithCustomPrompts: activeFlowData.nodes.filter(n => 
+                nodeCount: activeFlowData?.nodes?.length || 0,
+                workflowNodes: activeFlowData?.nodes?.filter(n => n.type === 'workflow').length || 0,
+                workflowNodesWithCustomPrompts: activeFlowData?.nodes?.filter(n => 
                   n.type === 'workflow' && n.data.customPrompt
-                ).length
+                ).length || 0
               });
               
-              // Store in memory for future use
-              activeFlows.set(callId, activeFlowData);
+              // Store in shared storage for future use
+              if (actualCallId && activeFlowData) {
+                storeFlowData(actualCallId, activeFlowData);
+              }
             }
           } else {
             console.warn('⚠️ Failed to retrieve call data:', callResponse.status, callResponse.statusText);
@@ -501,23 +535,108 @@ Provide a friendly closing message and thank the user for their time.`;
 // API to register flow data for a call
 export async function PUT(request: NextRequest) {
   try {
-    const { callId, flowData } = await request.json();
+    console.log('📝 PUT /api/flow/navigate called');
     
-    if (!callId || !flowData) {
+    // Check content type
+    const contentType = request.headers.get('content-type');
+    console.log('📋 Content-Type:', contentType);
+    
+    if (!contentType?.includes('application/json')) {
+      console.error('❌ Invalid content type:', contentType);
       return NextResponse.json(
-        { error: 'callId and flowData are required' },
+        { error: 'Content-Type must be application/json' },
         { status: 400 }
       );
     }
 
-    activeFlows.set(callId, flowData);
-    console.log('📝 Registered flow data for call:', callId);
+    let requestData;
+    try {
+      requestData = await request.json();
+    } catch (parseError) {
+      console.error('❌ JSON parse error:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 }
+      );
+    }
+
+    console.log('📝 PUT /api/flow/navigate received data:', {
+      hasCallId: !!requestData.callId,
+      hasFlowData: !!requestData.flowData,
+      callId: requestData.callId,
+      callIdType: typeof requestData.callId,
+      flowDataType: typeof requestData.flowData,
+      flowDataKeys: requestData.flowData ? Object.keys(requestData.flowData) : 'no flowData',
+      requestKeys: Object.keys(requestData)
+    });
+
+    const { callId, flowData } = requestData;
     
-    return NextResponse.json({ success: true });
+    // More forgiving validation
+    if (!callId) {
+      console.error('❌ PUT validation failed - missing callId:', {
+        callId: callId,
+        callIdType: typeof callId
+      });
+      return NextResponse.json(
+        { error: 'callId is required', received: { callId } },
+        { status: 400 }
+      );
+    }
+
+    if (!flowData) {
+      console.error('❌ PUT validation failed - missing flowData:', {
+        hasFlowData: !!flowData,
+        flowDataType: typeof flowData
+      });
+      return NextResponse.json(
+        { error: 'flowData is required', received: { hasFlowData: !!flowData } },
+        { status: 400 }
+      );
+    }
+
+    // Additional flowData validation
+    if (!flowData.nodes || !Array.isArray(flowData.nodes)) {
+      console.error('❌ PUT validation failed - invalid flowData.nodes:', {
+        hasNodes: !!flowData.nodes,
+        nodesType: typeof flowData.nodes,
+        isArray: Array.isArray(flowData.nodes)
+      });
+      return NextResponse.json(
+        { error: 'flowData must have nodes array', received: { hasNodes: !!flowData.nodes } },
+        { status: 400 }
+      );
+    }
+
+    if (!flowData.edges || !Array.isArray(flowData.edges)) {
+      console.error('❌ PUT validation failed - invalid flowData.edges:', {
+        hasEdges: !!flowData.edges,
+        edgesType: typeof flowData.edges,
+        isArray: Array.isArray(flowData.edges)
+      });
+      return NextResponse.json(
+        { error: 'flowData must have edges array', received: { hasEdges: !!flowData.edges } },
+        { status: 400 }
+      );
+    }
+
+    // Store the flow data using shared storage
+    storeFlowData(callId, flowData);
+    
+    console.log('✅ Successfully registered flow data for call:', callId);
+    console.log('📊 Active flows count:', getActiveFlowsCount());
+    console.log('📊 Flow data stats:', {
+      nodeCount: flowData.nodes.length,
+      edgeCount: flowData.edges.length,
+      nodeTypes: flowData.nodes.map((n: FlowNode) => n.type).join(', ')
+    });
+    
+    return NextResponse.json({ success: true, callId, nodeCount: flowData.nodes.length });
   } catch (error) {
-    console.error('❌ Error registering flow data:', error);
+    console.error('❌ Error in PUT /api/flow/navigate:', error);
+    console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack');
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );
   }
