@@ -42,6 +42,9 @@ export default function UltraVoxCallManager({
         setCurrentStageId(nodeId);
         setStageHistory(prev => [...prev, nodeId]);
         onStageChange?.(nodeId);
+        
+        // Add debug message about stage change
+        setDebugMessages(prev => [...prev, `Stage changed to: ${nodeId}`]);
       });
     } catch (err) {
       setError('Failed to initialize UltraVox service');
@@ -115,69 +118,57 @@ export default function UltraVoxCallManager({
   }, [isCallActive, onCallStatusChange]);
 
   const startCall = useCallback(async () => {
-    if (!ultravoxServiceRef.current) {
-      setError('UltraVox service not initialized');
+    if (!ultravoxServiceRef.current || !flowData.nodes.length) {
+      setError('UltraVox service not initialized or no flow data');
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setTranscripts([]);
+    setDebugMessages([]);
+    setStageHistory([]);
 
     try {
-      // Validate flow data
-      if (!flowData.nodes.length) {
-        throw new Error('Flow must have at least one node');
-      }
-
+      console.log('🚀 Starting UltraVox call with flow data...');
+      
+      // Find start node
       const startNode = flowData.nodes.find(n => n.type === 'start');
       if (!startNode) {
-        throw new Error('Flow must have a start node');
+        throw new Error('No start node found in flow');
       }
 
-      // Create the call with Call Stages support
-      console.log('📞 Creating UltraVox call with Call Stages...');
+      // Set initial stage
+      setCurrentStageId(startNode.id);
+      setStageHistory([startNode.id]);
+      
+      // Create call
       const call = await ultravoxServiceRef.current.createCall(flowData);
-      console.log('✅ Call created successfully:', call);
-
-      // Join the call using the SDK
-      console.log('🔗 Joining call with SDK...');
+      console.log('✅ Call created:', call.id);
+      
+      // Join call
       await ultravoxServiceRef.current.joinCall(call.joinUrl);
-      console.log('✅ Successfully joined call');
-
+      console.log('✅ Joined call successfully');
+      
       setIsCallActive(true);
       setCallStatus('STATUS_ACTIVE');
       onCallStatusChange?.('STATUS_ACTIVE');
       
-      // Set initial stage
-      setCurrentStageId(startNode.id);
-      setStageHistory([startNode.id]);
-      onStageChange?.(startNode.id);
-
-      // Initialize mute states from the session
-      const currentSession = ultravoxServiceRef.current.getCurrentSession();
-      if (currentSession) {
-        setIsMicMuted(currentSession.isMicMuted);
-        setIsSpeakerMuted(currentSession.isSpeakerMuted);
-      }
-
-      console.log('🎉 Call started successfully with Call Stages');
+      setDebugMessages(prev => [...prev, 
+        `Call created: ${call.id}`,
+        `Started at node: ${startNode.id} (${startNode.type})`,
+        'Call is now active'
+      ]);
 
     } catch (err) {
       console.error('❌ Failed to start call:', err);
-      
-      let errorMessage = 'Failed to start call';
-      if (err instanceof Error) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-      setIsCallActive(false);
-      setCallStatus('STATUS_UNSPECIFIED');
-      onCallStatusChange?.('STATUS_UNSPECIFIED');
+      setError(err instanceof Error ? err.message : 'Failed to start call');
+      setCallStatus('STATUS_FAILED');
+      onCallStatusChange?.('STATUS_FAILED');
     } finally {
       setIsLoading(false);
     }
-  }, [flowData, onCallStatusChange, onStageChange]);
+  }, [flowData, onCallStatusChange]);
 
   const endCall = useCallback(async () => {
     if (!ultravoxServiceRef.current) return;

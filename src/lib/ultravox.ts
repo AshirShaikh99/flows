@@ -106,7 +106,12 @@ export class UltraVoxFlowService {
         flowId: `flow_${Date.now()}`,
         startNodeId: startNode.id,
         nodeType: startNode.type,
-        hasCallStages: 'true'
+        hasCallStages: 'true',
+        // Store flow data in metadata for server-side access
+        flowData: JSON.stringify({
+          nodes: flowData.nodes,
+          edges: flowData.edges
+        })
       }
     };
 
@@ -158,6 +163,9 @@ export class UltraVoxFlowService {
         callStageHistory: [startNode.id],
         ultravoxCall: call
       };
+
+      // Register flow data with the navigation endpoint
+      await this.registerFlowData(call.id, flowData);
 
       return call;
 
@@ -363,7 +371,10 @@ Node ID: ${node.id}
 CUSTOM INSTRUCTIONS:
 ${node.data.customPrompt}
 
-You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool, always include the user's response in the 'userResponse' parameter.`;
+You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool:
+- Include the user's response in the 'userResponse' parameter
+- Include the current node ID '${node.id}' in the 'currentNodeId' parameter
+- The system will automatically determine and transition to the appropriate next node`;
       return customPromptBase;
     }
 
@@ -380,14 +391,20 @@ Node ID: ${node.id}
         
 You are starting a new conversation. ${node.data.content || 'Welcome! How can I help you today?'}
 
-Use the 'changeStage' tool when you need to move to the next step in the conversation. The tool will automatically determine the correct next node. Include any user response in the 'userResponse' parameter.`;
+Use the 'changeStage' tool when you need to move to the next step in the conversation. Include:
+- Any user response in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The tool will automatically determine the correct next node.`;
 
       case 'message':
         return `${basePrompt}
         
 Deliver this message to the user: "${node.data.content || node.data.label}"
 
-After delivering the message, use the 'changeStage' tool to move to the next step. The tool will automatically determine the next node.`;
+After delivering the message, use the 'changeStage' tool to move to the next step. Include:
+- Any user response in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The tool will automatically determine the next node.`;
 
       case 'question':
         const options = node.data.options?.map(opt => opt.text).join(', ') || '';
@@ -396,7 +413,10 @@ After delivering the message, use the 'changeStage' tool to move to the next ste
 Ask the user this question: "${node.data.question || node.data.content}"
 ${options ? `Available options: ${options}` : ''}
 
-When you receive their response, use the 'changeStage' tool with their answer in the 'userResponse' parameter. The tool will automatically determine the appropriate next node based on their response.`;
+When you receive their response, use the 'changeStage' tool with:
+- Their answer in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The tool will automatically determine the appropriate next node based on their response.`;
 
       case 'condition':
         return `${basePrompt}
@@ -404,12 +424,28 @@ When you receive their response, use the 'changeStage' tool with their answer in
 This is a conditional node that evaluates user responses.
 Condition: ${node.data?.condition?.operator || 'equals'} "${node.data?.condition?.value || ''}"
 
-When you receive a user response, use the 'changeStage' tool and include the user's exact response in the 'userResponse' parameter. The system will automatically evaluate the condition and navigate to the appropriate next node.`;
+When you receive a user response, use the 'changeStage' tool with:
+- The user's exact response in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The system will automatically evaluate the condition and navigate to the appropriate next node.`;
+
+      case 'workflow':
+        return `${basePrompt}
+
+${node.data?.content || node.data?.label || 'Process this workflow step.'}
+
+When ready to continue, use the 'changeStage' tool with:
+- Any user response in the 'userResponse' parameter  
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The tool will automatically determine the next step.`;
 
       default:
         return `${basePrompt}
 
-Process this node and use the 'changeStage' tool to continue the conversation flow. Always include any user response in the 'userResponse' parameter. The tool will automatically determine the next node.`;
+Process this node and use the 'changeStage' tool to continue the conversation flow. Include:
+- Any user response in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter
+The tool will automatically determine the next node.`;
     }
   }
 
@@ -426,6 +462,24 @@ Process this node and use the 'changeStage' tool to continue the conversation fl
               schema: {
                 type: 'string',
                 description: 'The user\'s response that triggered this transition'
+              },
+              required: false
+            },
+            {
+              name: 'currentNodeId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The current node ID'
+              },
+              required: false
+            },
+            {
+              name: 'callId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The current call ID'
               },
               required: false
             }
@@ -491,43 +545,61 @@ Process this node and use the 'changeStage' tool to continue the conversation fl
 
     // Register stage change tool - this will be called by the agent
     this.currentSession.registerToolImplementation('changeStage', async (parameters) => {
-      const { nodeId, userResponse, callId } = parameters as { 
-        nodeId?: string; 
+      const { userResponse, currentNodeId } = parameters as { 
         userResponse?: string;
-        callId?: string;
+        currentNodeId?: string;
       };
       
-      console.log('🔄 changeStage tool called:', { nodeId, userResponse, callId });
+      console.log('🔄 changeStage tool called with parameters:', { userResponse, currentNodeId });
 
       if (!this.executionContext) {
         throw new Error('No execution context available');
       }
 
-      let targetNodeId = nodeId;
+      // Get the actual call ID from execution context
+      const callId = this.executionContext.ultravoxCall?.id;
+      
+      console.log('📞 Using call ID from context:', callId);
 
-      // If no specific nodeId provided, try to determine next node based on current node and flow structure
-      if (!targetNodeId) {
-        targetNodeId = this.determineNextNode(userResponse);
+      // Call the server-side navigation endpoint
+      try {
+        const response = await fetch('/api/flow/navigate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            userResponse, 
+            callId,
+            currentNodeId: currentNodeId || this.executionContext.currentNodeId 
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Navigation failed: ${response.status} - ${errorData.message || 'Unknown error'}`);
+        }
+
+        const navigationResult = await response.json();
+        console.log('✅ Navigation successful:', navigationResult);
+
+        // Update current node ID if navigation was successful
+        if (navigationResult.metadata?.nodeId) {
+          this.executionContext.currentNodeId = navigationResult.metadata.nodeId;
+          this.executionContext.callStageHistory.push(navigationResult.metadata.nodeId);
+          
+          // Notify UI of stage change
+          if (this.stageChangeCallback) {
+            this.stageChangeCallback(navigationResult.metadata.nodeId);
+          }
+        }
+
+        return navigationResult.toolResultText || 'Navigation completed successfully';
+
+      } catch (error) {
+        console.error('❌ Navigation error:', error);
+        throw error;
       }
-
-      if (!targetNodeId) {
-        throw new Error('Unable to determine target node for navigation');
-      }
-
-      // Validate that the target node exists
-      const targetNode = this.executionContext.flowData.nodes.find(n => n.id === targetNodeId);
-      if (!targetNode) {
-        throw new Error(`Target node ${targetNodeId} not found in flow`);
-      }
-
-      const transition: StageTransition = {
-        toNodeId: targetNodeId,
-        trigger: 'tool_call',
-        data: userResponse ? { lastUserResponse: userResponse } : undefined
-      };
-
-      await this.transitionToStage(transition);
-      return `Successfully navigated to node ${targetNodeId}`;
     });
 
     // Register condition evaluation tool
@@ -662,6 +734,26 @@ Process this node and use the 'changeStage' tool to continue the conversation fl
     });
 
     console.log('✅ Call Stages event listeners configured successfully');
+  }
+
+  private async registerFlowData(callId: string, flowData: FlowData): Promise<void> {
+    try {
+      const response = await fetch('/api/flow/navigate', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ callId, flowData })
+      });
+
+      if (!response.ok) {
+        console.warn('⚠️ Failed to register flow data:', response.statusText);
+      } else {
+        console.log('✅ Flow data registered for call:', callId);
+      }
+    } catch (error) {
+      console.warn('⚠️ Error registering flow data:', error);
+    }
   }
 }
 
