@@ -87,9 +87,31 @@ export class UltraVoxFlowService {
       throw new Error('No start node found in flow');
     }
 
-    // Generate initial system prompt and tools for the start node
-    const systemPrompt = this.generateSystemPromptForNode(startNode);
-    const selectedTools = this.generateToolsForNode(startNode);
+    // CRITICAL FIX: Find the first meaningful conversation node
+    // If start node connects to a workflow node with custom prompt, use that instead
+    let initialNode = startNode;
+    const startEdges = flowData.edges.filter(e => e.source === startNode.id);
+    
+    if (startEdges.length > 0) {
+      const firstConnectedNode = flowData.nodes.find(n => n.id === startEdges[0].target);
+      if (firstConnectedNode && 
+          firstConnectedNode.type === 'workflow' && 
+          firstConnectedNode.data.customPrompt && 
+          firstConnectedNode.data.customPrompt.trim()) {
+        console.log('🎯 Using workflow node as initial conversation node:', firstConnectedNode.id);
+        initialNode = firstConnectedNode;
+      }
+    }
+
+    console.log('📝 Initial node for conversation:', {
+      nodeId: initialNode.id,
+      nodeType: initialNode.type,
+      hasCustomPrompt: !!initialNode.data.customPrompt
+    });
+
+    // Generate initial system prompt and tools for the initial node
+    const systemPrompt = this.generateSystemPromptForNode(initialNode);
+    const selectedTools = this.generateToolsForNode(initialNode);
     
     // Create call config with Call Stages support
     const callConfig = {
@@ -105,7 +127,8 @@ export class UltraVoxFlowService {
       metadata: {
         flowId: `flow_${Date.now()}`,
         startNodeId: startNode.id,
-        nodeType: startNode.type,
+        initialNodeId: initialNode.id,
+        nodeType: initialNode.type,
         hasCallStages: 'true',
         // Store flow data in metadata for server-side access
         flowData: JSON.stringify({
@@ -155,16 +178,17 @@ export class UltraVoxFlowService {
 
       console.log('✅ Valid call object created with Call Stages support');
 
-      // Initialize execution context
+      // Initialize execution context with the actual call object and initial node
       this.executionContext = {
         flowData,
-        currentNodeId: startNode.id,
+        currentNodeId: initialNode.id,
         variables: {},
-        callStageHistory: [startNode.id],
+        callStageHistory: [initialNode.id],
         ultravoxCall: call
       };
 
-      // Register flow data with the navigation endpoint
+      // Now register flow data with the actual call ID
+      console.log('📝 Registering flow data with call ID:', call.id);
       await this.registerFlowData(call.id, flowData);
 
       return call;
@@ -361,6 +385,34 @@ export class UltraVoxFlowService {
   // Private helper methods
 
   private generateSystemPromptForNode(node: FlowNode): string {
+    console.log('🎯 Generating system prompt for node:', {
+      id: node.id,
+      type: node.type,
+      hasCustomPrompt: !!node.data.customPrompt,
+      hasContent: !!node.data.content
+    });
+
+    // CRITICAL: For workflow nodes, prioritize custom prompt first
+    if (node.type === 'workflow' && node.data.customPrompt && node.data.customPrompt.trim()) {
+      const workflowPrompt = `You are an AI assistant helping users navigate through a conversational flow.
+      
+Current node: ${node.type}
+Node ID: ${node.id}
+
+WORKFLOW INSTRUCTIONS:
+${node.data.customPrompt}
+
+You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool:
+- Include the user's response in the 'userResponse' parameter
+- Include the current node ID '${node.id}' in the 'currentNodeId' parameter
+- The system will automatically determine and transition to the appropriate next node
+
+IMPORTANT: Follow the workflow instructions above. This is your primary directive.`;
+      
+      console.log('✅ Using workflow custom prompt for node:', node.id);
+      return workflowPrompt;
+    }
+
     // Use custom prompt if provided, otherwise generate default prompt
     if (node.data.customPrompt && node.data.customPrompt.trim()) {
       const customPromptBase = `You are an AI assistant helping users navigate through a conversational flow.
@@ -432,6 +484,7 @@ The system will automatically evaluate the condition and navigate to the appropr
       case 'workflow':
         return `${basePrompt}
 
+WORKFLOW CONTENT:
 ${node.data?.content || node.data?.label || 'Process this workflow step.'}
 
 When ready to continue, use the 'changeStage' tool with:

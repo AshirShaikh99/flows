@@ -80,6 +80,13 @@ export async function POST(request: NextRequest) {
             if (callData.metadata?.flowData) {
               activeFlowData = JSON.parse(callData.metadata.flowData);
               console.log('✅ Successfully parsed flow data from metadata');
+              console.log('📊 Flow structure:', {
+                nodeCount: activeFlowData.nodes.length,
+                workflowNodes: activeFlowData.nodes.filter(n => n.type === 'workflow').length,
+                workflowNodesWithCustomPrompts: activeFlowData.nodes.filter(n => 
+                  n.type === 'workflow' && n.data.customPrompt
+                ).length
+              });
               
               // Store in memory for future use
               activeFlows.set(callId, activeFlowData);
@@ -121,8 +128,11 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // At this point, TypeScript knows activeFlowData is not null
+    const flowData = activeFlowData as FlowData;
+
     // Find current node
-    const currentNode = activeFlowData.nodes.find(n => n.id === currentNodeId);
+    const currentNode = flowData.nodes.find(n => n.id === currentNodeId);
     if (!currentNode) {
       console.error('❌ Current node not found in flow:', currentNodeId);
       return NextResponse.json({
@@ -131,8 +141,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log('📍 Current node details:', {
+      id: currentNode.id,
+      type: currentNode.type,
+      hasCustomPrompt: !!currentNode.data.customPrompt,
+      customPrompt: currentNode.data.customPrompt?.substring(0, 50) + '...'
+    });
+
     // Determine next node based on flow logic
-    const nextNodeId = determineNextNode(activeFlowData!, currentNodeId, userResponse);
+    const nextNodeId = determineNextNode(flowData, currentNodeId, userResponse);
     
     if (!nextNodeId) {
       console.log('🏁 No next node found - conversation may be ending');
@@ -153,7 +170,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get target node
-    const targetNode = activeFlowData.nodes.find(n => n.id === nextNodeId);
+    const targetNode = flowData.nodes.find(n => n.id === nextNodeId);
     if (!targetNode) {
       console.error('❌ Target node not found:', nextNodeId);
       return NextResponse.json({
@@ -163,6 +180,12 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`🎯 Transitioning from ${currentNodeId} (${currentNode.type}) to ${nextNodeId} (${targetNode.type})`);
+    console.log('📍 Target node details:', {
+      id: targetNode.id,
+      type: targetNode.type,
+      hasCustomPrompt: !!targetNode.data.customPrompt,
+      customPrompt: targetNode.data.customPrompt?.substring(0, 50) + '...'
+    });
 
     // Generate stage configuration for target node
     const newStageConfig = {
@@ -183,7 +206,8 @@ export async function POST(request: NextRequest) {
       fromNode: currentNodeId,
       toNode: targetNode.id,
       nodeType: targetNode.type,
-      hasCustomPrompt: !!targetNode.data?.customPrompt
+      hasCustomPrompt: !!targetNode.data?.customPrompt,
+      promptLength: newStageConfig.systemPrompt.length
     });
 
     // Return the new stage configuration with proper header
@@ -389,11 +413,24 @@ This is a conditional node. Evaluate the user's response and use the 'changeStag
 Condition: ${node.data?.condition?.operator || 'equals'} "${node.data?.condition?.value || ''}"`;
 
     case 'workflow':
-      return `${basePrompt}
+      // For workflow nodes, prioritize custom prompt or use content
+      if (node.data?.customPrompt?.trim()) {
+        return `${basePrompt}
 
+WORKFLOW INSTRUCTIONS:
+${node.data.customPrompt}
+
+Use the 'changeStage' tool when ready to continue to the next step. Include:
+- The user's response in the 'userResponse' parameter
+- The current node ID '${node.id}' in the 'currentNodeId' parameter`;
+      } else {
+        return `${basePrompt}
+
+WORKFLOW CONTENT:
 ${node.data?.content || node.data?.label || 'Process this workflow step.'}
 
 Use the 'changeStage' tool when ready to continue to the next step.`;
+      }
 
     default:
       return `${basePrompt}
