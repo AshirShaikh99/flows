@@ -281,7 +281,32 @@ function determineNextNode(flowData: FlowData, currentNodeId: string, userRespon
   switch (currentNode.type) {
     case 'start':
     case 'message':
-      // For start and message nodes, go to first connected node
+      // For start and message nodes, use smart routing if multiple paths available
+      if (userResponse && outgoingEdges.length > 1) {
+        const responseText = userResponse.toLowerCase().trim();
+        
+        for (const edge of outgoingEdges) {
+          const targetNode = flowData.nodes.find(n => n.id === edge.target);
+          if (targetNode) {
+            const nodeId = targetNode.id.toLowerCase();
+            const nodeTitle = targetNode.data?.nodeTitle?.toLowerCase() || '';
+            const nodeContent = targetNode.data?.content?.toLowerCase() || '';
+            
+            // Check for keyword matches in response
+            if ((responseText.includes('free') || responseText.includes('yes') || responseText.includes('available') || responseText.includes('time')) && 
+                (nodeId.includes('free') || nodeTitle.includes('free') || nodeContent.includes('free'))) {
+              console.log('✅ Matched "free/available" response to node:', targetNode.id);
+              return edge.target;
+            }
+            if ((responseText.includes('busy') || responseText.includes('no') || responseText.includes('not available') || responseText.includes('later')) && 
+                (nodeId.includes('busy') || nodeTitle.includes('busy') || nodeContent.includes('busy'))) {
+              console.log('✅ Matched "busy" response to node:', targetNode.id);
+              return edge.target;
+            }
+          }
+        }
+      }
+      // Fallback to first connected node
       const nextEdge = outgoingEdges[0];
       console.log('➡️ Moving to next node:', nextEdge?.target);
       return nextEdge?.target || null;
@@ -386,6 +411,33 @@ function determineNextNode(flowData: FlowData, currentNodeId: string, userRespon
           }
         }
       }
+      
+      // If no explicit transitions, try to match user response to target node content/IDs
+      if (userResponse && outgoingEdges.length > 1) {
+        const responseText = userResponse.toLowerCase().trim();
+        
+        for (const edge of outgoingEdges) {
+          const targetNode = flowData.nodes.find(n => n.id === edge.target);
+          if (targetNode) {
+            const nodeId = targetNode.id.toLowerCase();
+            const nodeTitle = targetNode.data?.nodeTitle?.toLowerCase() || '';
+            const nodeContent = targetNode.data?.content?.toLowerCase() || '';
+            
+            // Check for keyword matches in response
+            if ((responseText.includes('free') || responseText.includes('yes') || responseText.includes('available') || responseText.includes('time')) && 
+                (nodeId.includes('free') || nodeTitle.includes('free') || nodeContent.includes('free'))) {
+              console.log('✅ Matched "free/available" response to node:', targetNode.id);
+              return edge.target;
+            }
+            if ((responseText.includes('busy') || responseText.includes('no') || responseText.includes('not available') || responseText.includes('later')) && 
+                (nodeId.includes('busy') || nodeTitle.includes('busy') || nodeContent.includes('busy'))) {
+              console.log('✅ Matched "busy" response to node:', targetNode.id);
+              return edge.target;
+            }
+          }
+        }
+      }
+      
       // For workflow nodes, proceed to next step
       console.log('⚙️ Processing workflow node, moving to next step');
       return outgoingEdges[0]?.target || null;
@@ -520,7 +572,24 @@ function generateStageTools(): ToolConfig[] {
 }
 
 function generateTransitionMessage(fromNode: FlowNode, toNode: FlowNode, userResponse?: string): string {
-  return `Transitioned from ${fromNode.type} node (${fromNode.id}) to ${toNode.type} node (${toNode.id})${userResponse ? ` based on user response: "${userResponse}"` : ''}`;
+  // Instead of a system message, speak naturally based on the target node's content
+  if (toNode.data?.content) {
+    return toNode.data.content;
+  } else if (toNode.data?.label) {
+    return toNode.data.label;
+  } else {
+    // Fallback to a natural greeting based on node type
+    switch (toNode.type) {
+      case 'workflow':
+        return `I understand. Let me help you with that.`;
+      case 'question':
+        return `I have a question for you.`;
+      case 'message':
+        return `Thank you for that information.`;
+      default:
+        return `Let me assist you further.`;
+    }
+  }
 }
 
 function generateEndingPrompt(node: FlowNode, userResponse?: string): string {
@@ -635,6 +704,48 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('❌ Error in PUT /api/flow/navigate:', error);
     console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack');
+    return NextResponse.json(
+      { error: 'Internal server error', details: String(error) },
+      { status: 500 }
+    );
+  }
+}
+
+// GET endpoint for debugging call IDs and flow data status
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const callId = searchParams.get('callId');
+    
+    if (callId) {
+      // Return flow data status for specific call ID
+      const flowData = getFlowData(callId);
+      return NextResponse.json({
+        callId,
+        hasFlowData: !!flowData,
+        nodeCount: flowData?.nodes?.length || 0,
+        edgeCount: flowData?.edges?.length || 0,
+        flowData: flowData ? { 
+          nodes: flowData.nodes.map((n: FlowNode) => ({ id: n.id, type: n.type })),
+          edgeCount: flowData.edges.length 
+        } : null
+      });
+    } else {
+      // Return overall status
+      const activeFlowsCount = getActiveFlowsCount();
+      return NextResponse.json({
+        status: 'Flow navigation API operational',
+        activeFlowsCount,
+        timestamp: new Date().toISOString(),
+        availableEndpoints: {
+          POST: 'Navigate between flow nodes',
+          PUT: 'Register flow data for a call',
+          GET: 'Get flow data status (add ?callId=xxx for specific call)'
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error in GET /api/flow/navigate:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }

@@ -7,6 +7,7 @@ import {
   StageTransition,
   SelectedTool
 } from '../types';
+import { registerCallIdMapping } from '../app/api/flow/shared-flow-data';
 
 // Types for ultravox-client (dynamic import)
 interface UltravoxSession {
@@ -208,6 +209,11 @@ export class UltraVoxFlowService {
       // Now register flow data with the actual call ID
       console.log('📝 Registering flow data with call ID:', call.callId);
       await this.registerFlowData(call.callId, flowData);
+
+      // CRITICAL FIX: Register call ID mapping for consistent navigation
+      // This ensures both real call ID and placeholder IDs work for navigation
+      await registerCallIdMapping(call.callId, 'call-1234567890');
+      console.log('🔗 Call ID mapping registered for consistent navigation');
 
       return call;
 

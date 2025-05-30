@@ -394,7 +394,41 @@ const FlowBuilder: React.FC = () => {
     console.log('📊 FlowBuilder: Call status changed to:', status);
     setCallStatus(status);
     setCallActive(status === 'STATUS_ACTIVE');
-  }, [setCallStatus, setCallActive]);
+    
+    // AUTO-REGISTER FLOW DATA: When call becomes active, ensure flow data is registered
+    if (status === 'STATUS_ACTIVE' && nodes.length > 0) {
+      const flowData: FlowData = {
+        nodes: nodes as FlowNode[],
+        edges: edges,
+      };
+      
+      // Register with both placeholder and any active call IDs
+      const registerFlowForCall = async () => {
+        try {
+          // Register with common placeholder ID used by navigation
+          const response = await fetch('/api/flow/navigate', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              callId: 'call-1234567890', 
+              flowData 
+            })
+          });
+          
+          if (response.ok) {
+            console.log('✅ Flow data auto-registered for active call');
+            showToastMessage('Flow synchronized with active call');
+          } else {
+            console.warn('⚠️ Failed to auto-register flow data');
+          }
+        } catch (error) {
+          console.warn('⚠️ Error auto-registering flow data:', error);
+        }
+      };
+      
+      registerFlowForCall();
+    }
+  }, [setCallStatus, setCallActive, nodes, edges, showToastMessage]);
 
   return (
     <div className="flex h-screen bg-gray-100">
