@@ -1,5 +1,5 @@
 import React from 'react';
-import { Hash, Settings, Phone, Grid3X3, Split, MessageCircle, Square, Play, Workflow } from 'lucide-react';
+import { Play, Workflow } from 'lucide-react';
 import { NodeType } from '../types';
 
 interface NodeSidebarProps {
@@ -22,55 +22,55 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ onDragStart }) => {
       color: 'text-indigo-600',
       description: 'Node with transition management'
     },
-    {
-      type: 'conversation' as NodeType,
-      label: 'Conversation',
-      icon: Hash,
-      color: 'text-purple-600',
-      description: 'Basic conversation node'
-    },
-    {
-      type: 'function' as NodeType,
-      label: 'Function',
-      icon: Settings,
-      color: 'text-purple-600',
-      description: 'Execute custom function'
-    },
-    {
-      type: 'call_transfer' as NodeType,
-      label: 'Call Transfer',
-      icon: Phone,
-      color: 'text-orange-600',
-      description: 'Transfer call to another agent'
-    },
-    {
-      type: 'press_digit' as NodeType,
-      label: 'Press Digit',
-      icon: Grid3X3,
-      color: 'text-blue-600',
-      description: 'Handle digit input'
-    },
-    {
-      type: 'logic_split' as NodeType,
-      label: 'Logic Split Node',
-      icon: Split,
-      color: 'text-blue-600',
-      description: 'Conditional logic branching'
-    },
-    {
-      type: 'sms' as NodeType,
-      label: 'SMS',
-      icon: MessageCircle,
-      color: 'text-yellow-600',
-      description: 'Send SMS message'
-    },
-    {
-      type: 'ending' as NodeType,
-      label: 'Ending',
-      icon: Square,
-      color: 'text-gray-600',
-      description: 'End the conversation'
-    }
+    // {
+    //   type: 'conversation' as NodeType,
+    //   label: 'Conversation',
+    //   icon: Hash,
+    //   color: 'text-purple-600',
+    //   description: 'Basic conversation node'
+    // },
+    // {
+    //   type: 'function' as NodeType,
+    //   label: 'Function',
+    //   icon: Settings,
+    //   color: 'text-purple-600',
+    //   description: 'Execute custom function'
+    // },
+    // {
+    //   type: 'call_transfer' as NodeType,
+    //   label: 'Call Transfer',
+    //   icon: Phone,
+    //   color: 'text-orange-600',
+    //   description: 'Transfer call to another agent'
+    // },
+    // {
+    //   type: 'press_digit' as NodeType,
+    //   label: 'Press Digit',
+    //   icon: Grid3X3,
+    //   color: 'text-blue-600',
+    //   description: 'Handle digit input'
+    // },
+    // {
+    //   type: 'logic_split' as NodeType,
+    //   label: 'Logic Split Node',
+    //   icon: Split,
+    //   color: 'text-blue-600',
+    //   description: 'Conditional logic branching'
+    // },
+    // {
+    //   type: 'sms' as NodeType,
+    //   label: 'SMS',
+    //   icon: MessageCircle,
+    //   color: 'text-yellow-600',
+    //   description: 'Send SMS message'
+    // },
+    // {
+    //   type: 'ending' as NodeType,
+    //   label: 'Ending',
+    //   icon: Square,
+    //   color: 'text-gray-600',
+    //   description: 'End the conversation'
+    // }
   ];
 
   return (

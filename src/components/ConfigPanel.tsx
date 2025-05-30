@@ -183,7 +183,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setContent(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter the welcome message..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-none text-sm text-gray-900"
                 rows={3}
               />
               <div className="text-xs text-gray-500 mt-1">
@@ -204,7 +204,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setContent(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter the message content..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm text-gray-900"
                 rows={4}
               />
               <div className="text-xs text-gray-500 mt-1">
@@ -227,7 +227,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setNodeTitle(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter node title..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-900"
               />
             </div>
 
@@ -240,7 +240,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setContent(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter the content or instructions for this node..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm text-gray-900"
                 rows={4}
               />
               <div className="text-xs text-gray-500 mt-1">
@@ -261,7 +261,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               onChange={(e) => setCustomPrompt(e.target.value)}
               onBlur={handleSave}
               placeholder="Enter custom instructions for UltraVox AI behavior at this node... (optional)"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm text-gray-900"
               rows={4}
             />
             <div className="text-xs text-gray-500 mt-1">
@@ -285,7 +285,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setQuestion(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter your question..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm text-gray-900"
               />
             </div>
 
@@ -313,7 +313,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                       onChange={(e) => updateOption(option.id, e.target.value)}
                       onBlur={handleSave}
                       placeholder="Option text..."
-                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm min-w-0"
+                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm min-w-0 text-gray-900"
                     />
                     <button
                       onClick={() => removeOption(option.id)}
@@ -344,7 +344,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 value={conditionQuestionId}
                 onChange={(e) => setConditionQuestionId(e.target.value)}
                 onBlur={handleSave}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm text-gray-900"
               >
                 <option value="">Select a question node...</option>
                 {questionNodes.map((node) => (
@@ -363,7 +363,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 value={conditionOperator}
                 onChange={(e) => setConditionOperator(e.target.value as 'equals' | 'contains')}
                 onBlur={handleSave}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm text-gray-900"
               >
                 <option value="equals">Equals</option>
                 <option value="contains">Contains</option>
@@ -380,7 +380,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setConditionValue(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter comparison value..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm text-gray-900"
               />
             </div>
           </div>
@@ -398,7 +398,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setNodeTitle(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter node title..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-900"
               />
             </div>
 
@@ -411,7 +411,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setContent(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter the content or instructions for this node..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm text-gray-900"
                 rows={4}
               />
             </div>
@@ -425,7 +425,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 onBlur={handleSave}
                 placeholder="Enter system prompt for this node..."
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none text-sm text-gray-900"
                 rows={3}
               />
             </div>
@@ -453,13 +453,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                       onChange={(e) => updateTransition(transition.id, { label: e.target.value })}
                       onBlur={handleSave}
                       placeholder="Transition label..."
-                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-900"
                     />
                     <select
                       value={transition.triggerType}
                       onChange={(e) => updateTransition(transition.id, { triggerType: e.target.value as 'user_response' | 'condition_met' | 'timeout' | 'manual' })}
                       onBlur={handleSave}
-                      className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-900"
                     >
                       <option value="user_response">User Response</option>
                       <option value="condition_met">Condition Met</option>
