@@ -1,0 +1,159 @@
+{
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "start",
+      "position": { "x": 250, "y": 50 },
+      "data": {
+        "content": "Welcome to TechCorp Support! I'm here to help you today.",
+        "customPrompt": "Start the conversation with a warm, professional greeting. After introducing yourself, use the changeStage tool to move to the main menu."
+      }
+    },
+    {
+      "id": "main-menu-2",
+      "type": "workflow",
+      "position": { "x": 250, "y": 200 },
+      "data": {
+        "nodeTitle": "Main Menu",
+        "content": "I can help you with technical issues, billing questions, or account problems. What type of assistance do you need today?",
+        "customPrompt": "Listen carefully to the user's response and determine which category their issue falls into: technical, billing, or account. Use the changeStage tool to route them to the appropriate support branch based on their needs. If unclear, ask clarifying questions.",
+        "transitions": [
+          {
+            "id": "tech-transition",
+            "label": "Technical Issues",
+            "triggerType": "user_response"
+          },
+          {
+            "id": "billing-transition", 
+            "label": "Billing Questions",
+            "triggerType": "user_response"
+          },
+          {
+            "id": "account-transition",
+            "label": "Account Problems", 
+            "triggerType": "user_response"
+          }
+        ]
+      }
+    },
+    {
+      "id": "technical-support-3",
+      "type": "workflow",
+      "position": { "x": 100, "y": 350 },
+      "data": {
+        "nodeTitle": "Technical Support",
+        "content": "I understand you're having a technical issue. Can you tell me what device or software you're having trouble with?",
+        "customPrompt": "You are now in technical support mode. Help the user troubleshoot their technical issue by asking clarifying questions about their device, operating system, and specific problem. Provide step-by-step solutions. Be patient and thorough. When the issue appears resolved, use changeStage to move to resolution.",
+        "transitions": [
+          {
+            "id": "tech-resolution",
+            "label": "Issue Resolved",
+            "triggerType": "condition_met"
+          }
+        ]
+      }
+    },
+    {
+      "id": "billing-support-4", 
+      "type": "workflow",
+      "position": { "x": 250, "y": 350 },
+      "data": {
+        "nodeTitle": "Billing Support",
+        "content": "I can help you with billing questions. Are you looking to check your balance, dispute a charge, or update payment information?",
+        "customPrompt": "You are now in billing support mode. Assist with billing inquiries professionally and empathetically. Handle payment issues with care. Ask for account verification when appropriate. When the billing issue is addressed, use changeStage to move to resolution.",
+        "transitions": [
+          {
+            "id": "billing-resolution",
+            "label": "Billing Issue Resolved", 
+            "triggerType": "condition_met"
+          }
+        ]
+      }
+    },
+    {
+      "id": "account-support-5",
+      "type": "workflow", 
+      "position": { "x": 400, "y": 350 },
+      "data": {
+        "nodeTitle": "Account Support",
+        "content": "I'm here to help with your account. Do you need to update your information, reset your password, or have other account questions?",
+        "customPrompt": "You are now in account support mode. Help with account-related issues while prioritizing security and verification. Guide users through account recovery or update processes carefully. Verify identity before making changes. When account issue is resolved, use changeStage to move to resolution.",
+        "transitions": [
+          {
+            "id": "account-resolution",
+            "label": "Account Issue Resolved",
+            "triggerType": "condition_met"
+          }
+        ]
+      }
+    },
+    {
+      "id": "resolution-6",
+      "type": "workflow",
+      "position": { "x": 250, "y": 500 },
+      "data": {
+        "nodeTitle": "Resolution & Wrap-up",
+        "content": "Great! Is there anything else I can help you with today? If your issue is resolved, I hope you have a wonderful day!",
+        "customPrompt": "This is the final stage. Confirm that the user's issue has been resolved. Offer additional assistance if needed. Thank them for contacting support and end the conversation on a positive, professional note. Do not use changeStage from here - this is the end of the flow.",
+        "transitions": []
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1-2",
+      "source": "start-1",
+      "target": "main-menu-2",
+      "sourceHandle": null,
+      "targetHandle": null
+    },
+    {
+      "id": "e2-3", 
+      "source": "main-menu-2",
+      "target": "technical-support-3",
+      "sourceHandle": null,
+      "targetHandle": null,
+      "label": "Technical Issues"
+    },
+    {
+      "id": "e2-4",
+      "source": "main-menu-2", 
+      "target": "billing-support-4",
+      "sourceHandle": null,
+      "targetHandle": null,
+      "label": "Billing Questions"
+    },
+    {
+      "id": "e2-5",
+      "source": "main-menu-2",
+      "target": "account-support-5", 
+      "sourceHandle": null,
+      "targetHandle": null,
+      "label": "Account Problems"
+    },
+    {
+      "id": "e3-6",
+      "source": "technical-support-3",
+      "target": "resolution-6",
+      "sourceHandle": null, 
+      "targetHandle": null,
+      "label": "Issue Resolved"
+    },
+    {
+      "id": "e4-6",
+      "source": "billing-support-4",
+      "target": "resolution-6",
+      "sourceHandle": null,
+      "targetHandle": null,
+      "label": "Issue Resolved"
+    },
+    {
+      "id": "e5-6", 
+      "source": "account-support-5",
+      "target": "resolution-6",
+      "sourceHandle": null,
+      "targetHandle": null,
+      "label": "Issue Resolved"
+    }
+  ]
+} 
