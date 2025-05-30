@@ -260,7 +260,7 @@ export default function UltraVoxCallManager({
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">UltraVox Call Manager</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Call Manager</h3>
         <div className="flex items-center space-x-2">
           <div className={`w-2 h-2 rounded-full ${callStatus === 'STATUS_ACTIVE' ? 'bg-green-500' : 'bg-gray-300'}`} />
           <span className={`text-sm font-medium ${getStatusColor(callStatus)}`}>

@@ -254,7 +254,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
         <div className="space-y-4 border-t border-gray-200 pt-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              🤖 Custom UltraVox Prompt
+              🤖 Custom Prompt
             </label>
             <textarea
               value={customPrompt}
