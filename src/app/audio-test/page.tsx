@@ -1,11 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Volume2, Play, AlertCircle } from 'lucide-react';
 
 export default function AudioTestPage() {
   const [testResults, setTestResults] = useState<string[]>([]);
   const [isTestingAudio, setIsTestingAudio] = useState(false);
+  const [browserInfo, setBrowserInfo] = useState({
+    userAgent: '',
+    hasAudioContext: false,
+    hasGetUserMedia: false,
+    hasAudioOutputSelection: false,
+  });
+
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window !== 'undefined') {
+      setBrowserInfo({
+        userAgent: navigator.userAgent,
+        hasAudioContext: !!(window.AudioContext || (window as any).webkitAudioContext),
+        hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+        hasAudioOutputSelection: 'setSinkId' in HTMLAudioElement.prototype,
+      });
+    }
+  }, []);
 
   const addResult = (message: string) => {
     setTestResults(prev => [...prev, `${new Date().toLocaleTimeString()}: ${message}`]);
@@ -194,14 +212,14 @@ export default function AudioTestPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <strong>User Agent:</strong>
-                <p className="text-gray-600 break-all">{navigator.userAgent}</p>
+                <p className="text-gray-600 break-all">{browserInfo.userAgent || 'Loading...'}</p>
               </div>
               <div>
                 <strong>Audio Support:</strong>
                 <ul className="text-gray-600 space-y-1">
-                  <li>AudioContext: {!!(window.AudioContext || (window as any).webkitAudioContext) ? '✅' : '❌'}</li>
-                  <li>getUserMedia: {!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? '✅' : '❌'}</li>
-                  <li>Audio Output Selection: {'setSinkId' in HTMLAudioElement.prototype ? '✅' : '❌'}</li>
+                  <li>AudioContext: {browserInfo.hasAudioContext ? '✅' : '❌'}</li>
+                  <li>getUserMedia: {browserInfo.hasGetUserMedia ? '✅' : '❌'}</li>
+                  <li>Audio Output Selection: {browserInfo.hasAudioOutputSelection ? '✅' : '❌'}</li>
                 </ul>
               </div>
             </div>
