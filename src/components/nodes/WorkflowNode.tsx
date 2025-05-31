@@ -33,7 +33,7 @@ const WorkflowNode: React.FC<WorkflowNodeProps> = ({ data, selected }) => {
       {/* Content */}
       <div className="p-4">
         <div className="text-gray-600 text-sm leading-relaxed mb-4">
-          {data.content || data.systemPrompt || 'Click to configure this node...'}
+          {data.customPrompt || data.content || data.systemPrompt || 'Click to configure this node...'}
         </div>
 
         {/* Transitions Section */}
