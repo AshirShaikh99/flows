@@ -132,10 +132,38 @@ export default function UltraVoxCallManager({
     try {
       console.log('🚀 Starting UltraVox call with flow data...');
       
+      // DEBUG: Log the actual flow data being used
+      console.log('🔍 FLOW DATA DEBUG:', {
+        nodeCount: flowData.nodes.length,
+        edgeCount: flowData.edges.length,
+        nodes: flowData.nodes.map(n => ({
+          id: n.id,
+          type: n.type,
+          hasContent: !!n.data.content,
+          hasCustomPrompt: !!n.data.customPrompt,
+          content: n.data.content?.substring(0, 50) + '...',
+          customPrompt: n.data.customPrompt?.substring(0, 50) + '...',
+          nodeTitle: n.data.nodeTitle
+        }))
+      });
+      
       // Find start node
       const startNode = flowData.nodes.find(n => n.type === 'start');
       if (!startNode) {
         throw new Error('No start node found in flow');
+      }
+
+      // Find workflow node to check its content
+      const workflowNode = flowData.nodes.find(n => n.type === 'workflow');
+      if (workflowNode) {
+        console.log('🎯 WORKFLOW NODE DATA:', {
+          id: workflowNode.id,
+          nodeTitle: workflowNode.data.nodeTitle,
+          content: workflowNode.data.content,
+          customPrompt: workflowNode.data.customPrompt,
+          hasContent: !!workflowNode.data.content,
+          hasCustomPrompt: !!workflowNode.data.customPrompt
+        });
       }
 
       // Set initial stage
@@ -157,6 +185,7 @@ export default function UltraVoxCallManager({
       setDebugMessages(prev => [...prev, 
         `Call created: ${call.callId}`,
         `Started at node: ${startNode.id} (${startNode.type})`,
+        workflowNode ? `Workflow: ${workflowNode.data.customPrompt || workflowNode.data.content || 'empty'}` : 'No workflow node',
         'Call is now active'
       ]);
 

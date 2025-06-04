@@ -93,18 +93,36 @@ export class UltraVoxFlowService {
     }
 
     // CRITICAL FIX: Find the first meaningful conversation node
-    // If start node connects to a workflow node with custom prompt, use that instead
+    // If start node connects to a workflow node, use that instead of start node
     let initialNode = startNode;
     const startEdges = flowData.edges.filter(e => e.source === startNode.id);
     
     if (startEdges.length > 0) {
       const firstConnectedNode = flowData.nodes.find(n => n.id === startEdges[0].target);
-      if (firstConnectedNode && 
-          firstConnectedNode.type === 'workflow' && 
-          firstConnectedNode.data.customPrompt && 
-          firstConnectedNode.data.customPrompt.trim()) {
+      
+      // Prefer workflow nodes for conversation flow, even if they're empty initially
+      if (firstConnectedNode && firstConnectedNode.type === 'workflow') {
         console.log('🎯 Using workflow node as initial conversation node:', firstConnectedNode.id);
+        
+        const customContent = firstConnectedNode.data.customPrompt?.trim() || firstConnectedNode.data.content?.trim();
+        if (customContent) {
+          console.log('📝 Custom content found:', customContent.substring(0, 100) + '...');
+        } else {
+          console.log('📝 Empty workflow node - will use default workflow behavior');
+        }
         initialNode = firstConnectedNode;
+      }
+      // For other node types, only use them if they have content
+      else if (firstConnectedNode && 
+          (firstConnectedNode.data.customPrompt?.trim() || firstConnectedNode.data.content?.trim())) {
+        const content = firstConnectedNode.data.customPrompt?.trim() || firstConnectedNode.data.content?.trim();
+        const isDefaultPlaceholder = content?.includes('👋 Click here to add your custom AI assistant prompt');
+        
+        if (!isDefaultPlaceholder) {
+          console.log('🎯 Using connected node as initial conversation node:', firstConnectedNode.id);
+          console.log('📝 Custom content found:', content?.substring(0, 100) + '...');
+          initialNode = firstConnectedNode;
+        }
       }
     }
 
@@ -424,14 +442,18 @@ export class UltraVoxFlowService {
     });
 
     // CRITICAL: For workflow nodes, prioritize custom prompt first
-    if (node.type === 'workflow' && node.data.customPrompt && node.data.customPrompt.trim()) {
-      const workflowPrompt = `You are an AI assistant helping users navigate through a conversational flow.
+    if (node.type === 'workflow') {
+      const customContent = node.data.customPrompt?.trim() || node.data.content?.trim();
+      const isDefaultPlaceholder = customContent?.includes('👋 Click here to add your custom AI assistant prompt');
+      
+      if (customContent && !isDefaultPlaceholder) {
+        const workflowPrompt = `You are an AI assistant helping users navigate through a conversational flow.
       
 Current node: ${node.type}
 Node ID: ${node.id}
 
 WORKFLOW INSTRUCTIONS:
-${node.data.customPrompt}
+${customContent}
 
 You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool:
 - Include the user's response in the 'userResponse' parameter
@@ -439,9 +461,11 @@ You have access to a 'changeStage' tool that will automatically determine the ne
 - The system will automatically determine and transition to the appropriate next node
 
 IMPORTANT: Follow the workflow instructions above. This is your primary directive.`;
-      
-      console.log('✅ Using workflow custom prompt for node:', node.id);
-      return workflowPrompt;
+        
+        console.log('✅ Using workflow custom content for node:', node.id);
+        console.log('📝 Content preview:', customContent.substring(0, 100) + '...');
+        return workflowPrompt;
+      }
     }
 
     // Use custom prompt if provided, otherwise generate default prompt
@@ -515,13 +539,15 @@ The system will automatically evaluate the condition and navigate to the appropr
       case 'workflow':
         return `${basePrompt}
 
-WORKFLOW CONTENT:
-${node.data?.content || node.data?.label || 'Process this workflow step.'}
+WORKFLOW INSTRUCTIONS:
+${node.data?.content || node.data?.customPrompt || 'You are a helpful AI assistant. Greet the user and ask how you can help them today. Listen to their response and use the available transitions to guide the conversation flow.'}
 
-When ready to continue, use the 'changeStage' tool with:
-- Any user response in the 'userResponse' parameter  
+You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool:
+- Include the user's response in the 'userResponse' parameter
 - The current node ID '${node.id}' in the 'currentNodeId' parameter
-The tool will automatically determine the next step.`;
+- The system will automatically determine and transition to the appropriate next node
+
+Use the transitions available in this workflow to guide the conversation appropriately.`;
 
       default:
         return `${basePrompt}

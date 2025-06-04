@@ -181,34 +181,6 @@ const FlowBuilder: React.FC = () => {
     event.dataTransfer.effectAllowed = 'move';
   };
 
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-
-      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
-      const type = event.dataTransfer.getData('application/reactflow');
-
-      if (typeof type === 'undefined' || !type || !reactFlowBounds || !reactFlowInstance) {
-        return;
-      }
-
-      const position = reactFlowInstance.project({
-        x: event.clientX - reactFlowBounds.left,
-        y: event.clientY - reactFlowBounds.top,
-      });
-
-      const newNode: Node = {
-        id: `${type}-${Date.now()}`,
-        type,
-        position,
-        data: getDefaultNodeData(type as NodeType),
-      };
-
-      setNodes((nds) => nds.concat(newNode));
-    },
-    [reactFlowInstance, setNodes]
-  );
-
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
@@ -301,7 +273,8 @@ const FlowBuilder: React.FC = () => {
       case 'workflow':
         return { 
           nodeTitle: 'Welcome Node',
-          content: '👋 Click here to add your custom AI assistant prompt. Define how your AI should greet users, what personality it should have, and what questions it should ask. Example: "Hello! I\'m your virtual assistant. I\'m here to help you with any questions or concerns you may have today. How can I assist you?"',
+          content: '',
+          customPrompt: '',
           transitions: [
             {
               id: `transition-reschedule-${Date.now()}-1`,
@@ -359,25 +332,87 @@ const FlowBuilder: React.FC = () => {
   }, []);
 
   const onNodeUpdate = useCallback((nodeId: string, data: Partial<NodeData>) => {
+    console.log('🔄 FlowBuilder onNodeUpdate called:', {
+      nodeId,
+      updateData: data,
+      hasContent: !!data.content,
+      hasCustomPrompt: !!data.customPrompt,
+      contentPreview: data.content ? data.content.substring(0, 50) + '...' : 'empty',
+      customPromptPreview: data.customPrompt ? data.customPrompt.substring(0, 50) + '...' : 'empty'
+    });
+
     setNodes((nds) =>
-      nds.map((node) =>
-        node.id === nodeId ? { ...node, data: { ...node.data, ...data } } : node
-      )
+      nds.map((node) => {
+        if (node.id === nodeId) {
+          const updatedNode = { ...node, data: { ...node.data, ...data } };
+          console.log('📝 Updated node data:', {
+            nodeId,
+            beforeUpdate: {
+              content: node.data.content,
+              customPrompt: node.data.customPrompt
+            },
+            afterUpdate: {
+              content: updatedNode.data.content,
+              customPrompt: updatedNode.data.customPrompt
+            }
+          });
+          return updatedNode;
+        }
+        return node;
+      })
     );
   }, [setNodes]);
 
+  // Define onDrop AFTER onNodeUpdate to avoid linter error
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const reactFlowBounds = reactFlowWrapper.current?.getBoundingClientRect();
+      const type = event.dataTransfer.getData('application/reactflow');
+
+      if (typeof type === 'undefined' || !type || !reactFlowBounds || !reactFlowInstance) {
+        return;
+      }
+
+      const position = reactFlowInstance.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
+
+      const newNode: Node = {
+        id: `${type}-${Date.now()}`,
+        type,
+        position,
+        data: {
+          ...getDefaultNodeData(type as NodeType),
+          onNodeUpdate: onNodeUpdate, // Immediately add onNodeUpdate to new nodes
+        },
+      };
+
+      console.log('🆕 Creating new node with onNodeUpdate:', newNode.id, 'hasOnNodeUpdate:', !!newNode.data.onNodeUpdate);
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [reactFlowInstance, setNodes] // Remove onNodeUpdate from dependencies to avoid circular reference
+  );
+
   // Add onNodeUpdate to all nodes' data so they can access it for inline editing
   useEffect(() => {
+    console.log('🔧 Adding onNodeUpdate to all nodes. Node count:', nodes.length);
     setNodes((nds) =>
-      nds.map((node) => ({
-        ...node,
-        data: {
-          ...node.data,
-          onNodeUpdate: onNodeUpdate,
-        },
-      }))
+      nds.map((node) => {
+        const updatedNode = {
+          ...node,
+          data: {
+            ...node.data,
+            onNodeUpdate: onNodeUpdate,
+          },
+        };
+        console.log('📝 Added onNodeUpdate to node:', node.id, 'hasOnNodeUpdate:', !!updatedNode.data.onNodeUpdate);
+        return updatedNode;
+      })
     );
-  }, [onNodeUpdate, setNodes]);
+  }, [onNodeUpdate]); // Remove setNodes from dependencies to avoid infinite loop
 
   const showToastMessage = useCallback((message: string) => {
     setToastMessage(message);

@@ -33,20 +33,40 @@ const outputHandleStyle = {
 
 const WorkflowNode: React.FC<WorkflowNodeProps> = ({ id, data, selected }) => {
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
-  const [promptValue, setPromptValue] = useState(data.content || data.customPrompt || '');
+  const getInitialPromptValue = () => {
+    if (data.customPrompt && data.customPrompt.trim()) {
+      return data.customPrompt;
+    }
+    if (data.content && data.content.trim() && !data.content.includes('👋 Click here to add your custom AI assistant prompt')) {
+      return data.content;
+    }
+    return '';
+  };
+  const [promptValue, setPromptValue] = useState(getInitialPromptValue());
   const [nodeTitle, setNodeTitle] = useState(data.nodeTitle || 'Welcome Node');
   const [transitions, setTransitions] = useState<NodeTransition[]>(data.transitions || []);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get onNodeUpdate from data
   const onNodeUpdate = data.onNodeUpdate;
 
   // Update internal state when data changes
   useEffect(() => {
-    setPromptValue(data.content || data.customPrompt || '');
+    const newPromptValue = (() => {
+      if (data.customPrompt && data.customPrompt.trim()) {
+        return data.customPrompt;
+      }
+      if (data.content && data.content.trim() && !data.content.includes('👋 Click here to add your custom AI assistant prompt')) {
+        return data.content;
+      }
+      return '';
+    })();
+    setPromptValue(newPromptValue);
     setNodeTitle(data.nodeTitle || 'Welcome Node');
     setTransitions(data.transitions || []);
   }, [data]);
@@ -66,6 +86,49 @@ const WorkflowNode: React.FC<WorkflowNodeProps> = ({ id, data, selected }) => {
       titleInputRef.current.select();
     }
   }, [isEditingTitle]);
+
+  // Auto-save with debounce
+  useEffect(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    // Auto-save if we have any content (even if it's just a space or short text)
+    if (promptValue.trim()) {
+      console.log('💾 Auto-saving WorkflowNode prompt:', promptValue.substring(0, 30) + '...');
+      setIsSaving(true);
+      autoSaveTimeoutRef.current = setTimeout(() => {
+        if (onNodeUpdate) {
+          onNodeUpdate(id, {
+            nodeTitle,
+            content: promptValue, // Update content field
+            customPrompt: promptValue, // Also save as customPrompt for consistency
+            transitions
+          });
+          console.log('✅ Workflow node saved successfully');
+        } else {
+          console.error('❌ onNodeUpdate is not available!');
+        }
+        setIsSaving(false);
+      }, 1000); // 1 second debounce
+    } else {
+      // If the prompt is empty, clear both content and customPrompt
+      if (onNodeUpdate) {
+        onNodeUpdate(id, {
+          nodeTitle,
+          content: '',
+          customPrompt: '',
+          transitions
+        });
+      }
+    }
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [promptValue, nodeTitle, transitions, onNodeUpdate, id]);
 
   const handleSave = () => {
     if (onNodeUpdate) {
@@ -157,8 +220,14 @@ const WorkflowNode: React.FC<WorkflowNodeProps> = ({ id, data, selected }) => {
       <div className="p-4 space-y-4">
         {/* Prompt Section */}
         <div>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center justify-between mb-3">
             <span className="text-gray-500 text-sm font-medium">Prompt</span>
+            {isSaving && (
+              <div className="flex items-center gap-1 text-xs text-green-600">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                Auto-saving...
+              </div>
+            )}
           </div>
           
           {isEditingPrompt ? (
@@ -178,7 +247,7 @@ const WorkflowNode: React.FC<WorkflowNodeProps> = ({ id, data, selected }) => {
                 autoFocus
               />
               <div className="text-xs text-gray-500">
-                Press Ctrl+Enter to save
+                Auto-save enabled • Press Ctrl+Enter to save immediately
               </div>
             </div>
           ) : (
@@ -186,7 +255,7 @@ const WorkflowNode: React.FC<WorkflowNodeProps> = ({ id, data, selected }) => {
               className="p-3 text-gray-700 text-sm bg-gray-50 rounded-lg border border-gray-200 cursor-text hover:bg-gray-100 min-h-[80px] whitespace-pre-wrap"
               onClick={() => setIsEditingPrompt(true)}
             >
-              {promptValue || 'Click to add your AI assistant prompt. Define the personality, behavior, and instructions for this conversation step.'}
+              {promptValue || 'Click to add your AI assistant prompt. Example: "I am ashir, how can I help you today?"'}
             </div>
           )}
         </div>

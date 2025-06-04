@@ -500,11 +500,14 @@ Condition: ${node.data?.condition?.operator || 'equals'} "${node.data?.condition
 
     case 'workflow':
       // For workflow nodes, prioritize custom prompt or use content
-      if (node.data?.customPrompt?.trim()) {
+      const workflowContent = node.data?.customPrompt?.trim() || node.data?.content?.trim();
+      const isDefaultPlaceholder = workflowContent?.includes('👋 Click here to add your custom AI assistant prompt');
+      
+      if (workflowContent && !isDefaultPlaceholder) {
         return `${basePrompt}
 
 WORKFLOW INSTRUCTIONS:
-${node.data.customPrompt}
+${workflowContent}
 
 Use the 'changeStage' tool when ready to continue to the next step. Include:
 - The user's response in the 'userResponse' parameter
