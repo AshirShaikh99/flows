@@ -1,50 +1,47 @@
 import React from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Play, Settings } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { NodeData } from '../../types';
 
 interface StartNodeProps extends NodeProps {
   data: NodeData;
 }
 
+// Custom handle styles following ReactFlow best practices (same as WorkflowNode)
+const handleStyle = {
+  width: '16px',
+  height: '16px',
+  border: '2px solid #ffffff',
+  borderRadius: '50%',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+  transition: 'all 0.2s ease',
+};
+
+const outputHandleStyle = {
+  ...handleStyle,
+  backgroundColor: '#fb7185', // rose-400
+  right: '-8px',
+};
+
 const StartNode: React.FC<StartNodeProps> = ({ data, selected }) => {
   return (
-    <div className={`relative bg-white rounded-lg min-w-[250px] max-w-[300px] shadow-sm border ${
-      selected ? 'border-rose-300 shadow-md' : 'border-gray-200'
-    } transition-all`}>
+    <div className={`relative bg-white rounded-full px-8 py-4 shadow-lg border-2 ${
+      selected ? 'border-rose-300 shadow-xl' : 'border-gray-200'
+    } transition-all min-w-[160px] flex items-center justify-center`}>
       
-      {/* Header */}
-      <div className="bg-rose-50 rounded-t-lg p-3 border-b border-rose-200">
-        <div className="flex items-center gap-2">
-          <Play className="w-4 h-4 text-rose-600" />
-          <span className="text-rose-700 text-sm font-medium">{data.nodeTitle || 'Start'}</span>
-          {data.customPrompt && (
-            <div title="Custom prompt configured">
-              <Settings className="w-3 h-3 text-rose-500" />
-            </div>
-          )}
-        </div>
+      <div className="flex items-center gap-3">
+        <Play className="w-5 h-5 text-rose-600 fill-rose-600" />
+        <span className="text-rose-700 text-base font-semibold">Begin</span>
       </div>
-
-      {/* Content */}
-      {data.content ? (
-        <div className="p-4">
-          <div className="text-gray-600 text-sm leading-relaxed">
-            {data.content}
-          </div>
-        </div>
-      ) : (
-        <div className="p-4">
-          <div className="text-gray-500 text-sm italic text-center">
-            Flow entry point
-          </div>
-        </div>
-      )}
       
       <Handle
         type="source"
         position={Position.Right}
-        className="w-3 h-3 bg-rose-400 border-2 border-white"
+        style={{
+          ...outputHandleStyle,
+          top: '50%',
+          zIndex: 10,
+        }}
       />
     </div>
   );
