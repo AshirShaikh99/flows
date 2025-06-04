@@ -24,6 +24,7 @@ type FlowAction =
   | { type: 'SET_CALL_ACTIVE'; payload: boolean }
   | { type: 'SET_CURRENT_STAGES'; payload: UltraVoxCallStage[] }
   | { type: 'UPDATE_VARIABLES'; payload: Record<string, unknown> }
+  | { type: 'SET_GLOBAL_PROMPT'; payload: string }
   | { type: 'RESET_FLOW_STATE' };
 
 // Initial State
@@ -82,6 +83,15 @@ function flowReducer(state: FlowState, action: FlowAction): FlowState {
         variables: { ...state.variables, ...action.payload },
       };
     
+    case 'SET_GLOBAL_PROMPT':
+      return {
+        ...state,
+        flowData: {
+          ...state.flowData,
+          globalPrompt: action.payload,
+        },
+      };
+    
     case 'RESET_FLOW_STATE':
       return {
         ...initialState,
@@ -100,6 +110,7 @@ interface FlowContextType {
   
   // Helper functions
   setFlowData: (flowData: FlowData) => void;
+  setGlobalPrompt: (prompt: string) => void;
   transitionToStage: (stageId: string) => void;
   setCallStatus: (status: CallStatus) => void;
   setCallActive: (active: boolean) => void;
@@ -135,6 +146,10 @@ export function FlowProvider({ children }: FlowProviderProps) {
   // Helper functions
   const setFlowData = useCallback((flowData: FlowData) => {
     dispatch({ type: 'SET_FLOW_DATA', payload: flowData });
+  }, []);
+
+  const setGlobalPrompt = useCallback((prompt: string) => {
+    dispatch({ type: 'SET_GLOBAL_PROMPT', payload: prompt });
   }, []);
 
   const transitionToStage = useCallback((stageId: string) => {
@@ -194,6 +209,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
     state,
     dispatch,
     setFlowData,
+    setGlobalPrompt,
     transitionToStage,
     setCallStatus,
     setCallActive,

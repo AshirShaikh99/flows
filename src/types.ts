@@ -18,6 +18,7 @@ export interface NodeData {
   systemPrompt?: string;
   transitions?: NodeTransition[];
   description?: string;
+  onNodeUpdate?: (nodeId: string, data: Partial<NodeData>) => void;
 }
 
 export interface NodeTransition {
@@ -54,6 +55,7 @@ export interface FlowEdge {
 export interface FlowData {
   nodes: FlowNode[];
   edges: FlowEdge[];
+  globalPrompt?: string;
 }
 
 // UltraVox Integration Types

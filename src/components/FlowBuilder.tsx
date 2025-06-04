@@ -18,6 +18,7 @@ import 'reactflow/dist/style.css';
 import { Save, Download, Trash2, RotateCcw } from 'lucide-react';
 import NodeSidebar from './NodeSidebar';
 import ConfigPanel from './ConfigPanel';
+import GlobalSettingsPanel from './GlobalSettingsPanel';
 import UltraVoxCallManager from './UltraVoxCallManager';
 import StartNode from './nodes/StartNode';
 import MessageNode from './nodes/MessageNode';
@@ -50,6 +51,7 @@ const FlowBuilder: React.FC = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
   const [showConfigPanel, setShowConfigPanel] = useState(false);
+  const [showGlobalSettings, setShowGlobalSettings] = useState(false);
   const [showUltraVoxPanel, setShowUltraVoxPanel] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -57,7 +59,7 @@ const FlowBuilder: React.FC = () => {
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
   // Use Flow Context
-  const { setFlowData } = useFlowContext();
+  const { setFlowData, state } = useFlowContext();
   const { currentStageId, callStatus, transitionToStage, setCallStatus, setCallActive, stageHistory } = useCallStages();
 
   // UltraVox API key (in production, this should come from environment variables)
@@ -88,9 +90,10 @@ const FlowBuilder: React.FC = () => {
     const flowData: FlowData = {
       nodes: nodes as FlowNode[],
       edges: edges,
+      globalPrompt: state.flowData.globalPrompt,
     };
     setFlowData(flowData);
-  }, [nodes, edges, setFlowData]);
+  }, [nodes, edges, state.flowData.globalPrompt, setFlowData]);
 
   // Update node styles based on current stage
   useEffect(() => {
@@ -297,17 +300,27 @@ const FlowBuilder: React.FC = () => {
         };
       case 'workflow':
         return { 
-          nodeTitle: 'Workflow Node',
-          content: 'Say Hello to {{customer_name}}, and ask the user if now is a good time to talk.',
+          nodeTitle: 'Welcome Node',
+          content: '👋 Click here to add your custom AI assistant prompt. Define how your AI should greet users, what personality it should have, and what questions it should ask. Example: "Hello! I\'m your virtual assistant. I\'m here to help you with any questions or concerns you may have today. How can I assist you?"',
           transitions: [
             {
-              id: `transition-free-${Date.now()}-1`,
-              label: 'user is free',
+              id: `transition-reschedule-${Date.now()}-1`,
+              label: 'User needs to reschedule an appointment',
               triggerType: 'user_response'
             },
             {
-              id: `transition-busy-${Date.now()}-2`,
-              label: 'user is busy',
+              id: `transition-surgery-${Date.now()}-2`,
+              label: 'User is about to have a surgery, and is asking about preparations',
+              triggerType: 'user_response'
+            },
+            {
+              id: `transition-transfer-${Date.now()}-3`,
+              label: 'user asks to be transferred to an agent',
+              triggerType: 'user_response'
+            },
+            {
+              id: `transition-medical-${Date.now()}-4`,
+              label: 'User is having a medical condition',
               triggerType: 'user_response'
             }
           ]
@@ -318,6 +331,23 @@ const FlowBuilder: React.FC = () => {
   };
 
   const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    // Close global settings when clicking on a node
+    setShowGlobalSettings(false);
+    
+    // Don't show ConfigPanel for workflow nodes since they have inline editing
+    if (node.type === 'workflow') {
+      setSelectedNode(null);
+      setShowConfigPanel(false);
+      return;
+    }
+    
+    // Don't show ConfigPanel for start nodes since they are just entry points
+    if (node.type === 'start') {
+      setSelectedNode(null);
+      setShowConfigPanel(false);
+      return;
+    }
+    
     setSelectedNode(node as FlowNode);
     setShowConfigPanel(true);
   }, []);
@@ -325,6 +355,7 @@ const FlowBuilder: React.FC = () => {
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
     setShowConfigPanel(false);
+    setShowGlobalSettings(true);
   }, []);
 
   const onNodeUpdate = useCallback((nodeId: string, data: Partial<NodeData>) => {
@@ -334,6 +365,19 @@ const FlowBuilder: React.FC = () => {
       )
     );
   }, [setNodes]);
+
+  // Add onNodeUpdate to all nodes' data so they can access it for inline editing
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          onNodeUpdate: onNodeUpdate,
+        },
+      }))
+    );
+  }, [onNodeUpdate, setNodes]);
 
   const showToastMessage = useCallback((message: string) => {
     setToastMessage(message);
@@ -347,15 +391,17 @@ const FlowBuilder: React.FC = () => {
     const flowData: FlowData = {
       nodes: nodes as FlowNode[],
       edges: edges,
+      globalPrompt: state.flowData.globalPrompt,
     };
     localStorage.setItem('conversation-flow', JSON.stringify(flowData));
     showToastMessage('Flow saved successfully!');
-  }, [nodes, edges, showToastMessage]);
+  }, [nodes, edges, state.flowData.globalPrompt, showToastMessage]);
 
   const exportFlow = useCallback(() => {
     const flowData = {
       nodes: nodes as FlowNode[],
       edges,
+      globalPrompt: state.flowData.globalPrompt,
     };
     const dataStr = JSON.stringify(flowData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -365,7 +411,7 @@ const FlowBuilder: React.FC = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
-  }, [nodes, edges]);
+  }, [nodes, edges, state.flowData.globalPrompt]);
 
   const clearFlow = useCallback(() => {
     if (confirm('Are you sure you want to clear the entire flow? This action cannot be undone.')) {
@@ -554,6 +600,13 @@ const FlowBuilder: React.FC = () => {
           nodes={nodes as FlowNode[]}
           onNodeUpdate={onNodeUpdate}
           onClose={() => setShowConfigPanel(false)}
+        />
+      )}
+
+      {/* Global Settings Panel */}
+      {showGlobalSettings && (
+        <GlobalSettingsPanel
+          onClose={() => setShowGlobalSettings(false)}
         />
       )}
 
