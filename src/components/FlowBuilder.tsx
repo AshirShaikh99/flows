@@ -364,7 +364,10 @@ const FlowBuilder: React.FC = () => {
     setShowConfigPanel(false);
   }, []);
 
-  const onNodeUpdate = useCallback((nodeId: string, data: Partial<NodeData>) => {
+  // Use ref to create stable onNodeUpdate function
+  const onNodeUpdateRef = useRef<((nodeId: string, data: Partial<NodeData>) => void) | null>(null);
+  
+  onNodeUpdateRef.current = (nodeId: string, data: Partial<NodeData>) => {
     console.log('🔄 FlowBuilder onNodeUpdate called:', {
       nodeId,
       updateData: data,
@@ -373,6 +376,8 @@ const FlowBuilder: React.FC = () => {
       contentPreview: data.content ? data.content.substring(0, 50) + '...' : 'empty',
       customPromptPreview: data.customPrompt ? data.customPrompt.substring(0, 50) + '...' : 'empty'
     });
+
+    let updatedNodeForSelection: FlowNode | null = null;
 
     setNodes((nds) =>
       nds.map((node) => {
@@ -390,18 +395,28 @@ const FlowBuilder: React.FC = () => {
             }
           });
           
-          // CRITICAL FIX: Update selectedNode if it's the same node being updated
-          if (selectedNode && selectedNode.id === nodeId) {
-            console.log('🎯 Updating selectedNode to reflect data changes');
-            setSelectedNode(updatedNode as FlowNode);
-          }
+          // Store updated node for potential selectedNode update
+          updatedNodeForSelection = updatedNode as FlowNode;
           
           return updatedNode;
         }
         return node;
       })
     );
-  }, [setNodes, selectedNode]);
+
+    // Update selectedNode outside of setNodes to avoid dependency issues
+    setSelectedNode(currentSelected => {
+      if (currentSelected && currentSelected.id === nodeId && updatedNodeForSelection) {
+        console.log('🎯 Updating selectedNode to reflect data changes');
+        return updatedNodeForSelection;
+      }
+      return currentSelected;
+    });
+  };
+
+  const onNodeUpdate = useCallback((nodeId: string, data: Partial<NodeData>) => {
+    onNodeUpdateRef.current?.(nodeId, data);
+  }, []);
 
   // Define onDrop AFTER onNodeUpdate to avoid linter error
   const onDrop = useCallback(
@@ -433,7 +448,7 @@ const FlowBuilder: React.FC = () => {
       console.log('🆕 Creating new node with onNodeUpdate:', newNode.id, 'hasOnNodeUpdate:', !!newNode.data.onNodeUpdate);
       setNodes((nds) => nds.concat(newNode));
     },
-    [reactFlowInstance, setNodes] // Remove onNodeUpdate from dependencies to avoid circular reference
+    [reactFlowInstance, setNodes, onNodeUpdate]
   );
 
   // Add onNodeUpdate to all nodes' data so they can access it for inline editing
@@ -441,18 +456,22 @@ const FlowBuilder: React.FC = () => {
     console.log('🔧 Adding onNodeUpdate to all nodes. Node count:', nodes.length);
     setNodes((nds) =>
       nds.map((node) => {
-        const updatedNode = {
-          ...node,
-          data: {
-            ...node.data,
-            onNodeUpdate: onNodeUpdate,
-          },
-        };
-        console.log('📝 Added onNodeUpdate to node:', node.id, 'hasOnNodeUpdate:', !!updatedNode.data.onNodeUpdate);
-        return updatedNode;
+        // Only update if the node doesn't have onNodeUpdate or it's different
+        if (!node.data.onNodeUpdate) {
+          const updatedNode = {
+            ...node,
+            data: {
+              ...node.data,
+              onNodeUpdate: onNodeUpdate,
+            },
+          };
+          console.log('📝 Added onNodeUpdate to node:', node.id);
+          return updatedNode;
+        }
+        return node;
       })
     );
-  }, [onNodeUpdate]); // Remove setNodes from dependencies to avoid infinite loop
+  }, [onNodeUpdate]); // Keep this but optimize to avoid unnecessary updates
 
   const showToastMessage = useCallback((message: string) => {
     setToastMessage(message);
