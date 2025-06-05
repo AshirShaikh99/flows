@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
-import { Calendar, CalendarCheck, Settings, Save, AlertCircle } from 'lucide-react';
-import { NodeData } from '../../types';
+import { Calendar, CalendarCheck, Settings, Save, AlertCircle, ArrowRight, Plus, Trash2 } from 'lucide-react';
+import { NodeData, NodeTransition } from '../../types';
 
 interface CalNodeProps extends NodeProps {
   data: NodeData & {
@@ -17,7 +17,7 @@ const getNodeConfig = (type: string) => {
         color: 'bg-blue-50',
         iconColor: 'text-blue-600',
         borderColor: 'border-blue-300',
-        handleColor: 'bg-blue-400',
+        handleColor: '#3b82f6', // blue-500
         title: 'Check Calendar Availability',
         description: 'Check available time slots using Cal.com'
       };
@@ -27,7 +27,7 @@ const getNodeConfig = (type: string) => {
         color: 'bg-green-50',
         iconColor: 'text-green-600',
         borderColor: 'border-green-300',
-        handleColor: 'bg-green-400',
+        handleColor: '#22c55e', // green-500
         title: 'Book Appointment',
         description: 'Book appointment using Cal.com'
       };
@@ -37,12 +37,23 @@ const getNodeConfig = (type: string) => {
         color: 'bg-gray-50',
         iconColor: 'text-gray-600',
         borderColor: 'border-gray-300',
-        handleColor: 'bg-gray-400',
+        handleColor: '#6b7280', // gray-500
         title: 'Cal Function',
         description: 'Cal.com integration function'
       };
   }
 };
+
+// Custom handle styles following ReactFlow best practices
+const getHandleStyle = (color: string) => ({
+  width: '16px',
+  height: '16px',
+  backgroundColor: color,
+  border: '2px solid #ffffff',
+  borderRadius: '50%',
+  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+  transition: 'all 0.2s ease',
+});
 
 const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
   const config = getNodeConfig(type);
@@ -54,6 +65,7 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
   const [eventTypeId, setEventTypeId] = useState(data.calEventTypeId || '');
   const [timezone, setTimezone] = useState(data.calTimezone || 'America/Los_Angeles');
   const [description, setDescription] = useState(data.description || config.description);
+  const [transitions, setTransitions] = useState<NodeTransition[]>(data.transitions || []);
   const [isSaving, setIsSaving] = useState(false);
   
   const onNodeUpdate = data.onNodeUpdate;
@@ -66,7 +78,8 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
     setEventTypeId(data.calEventTypeId || '');
     setTimezone(data.calTimezone || 'America/Los_Angeles');
     setDescription(data.description || config.description);
-  }, [data.nodeTitle, data.calApiKey, data.calEventTypeId, data.calTimezone, data.description, config.title, config.description]);
+    setTransitions(data.transitions || []);
+  }, [data.nodeTitle, data.calApiKey, data.calEventTypeId, data.calTimezone, data.description, data.transitions, config.title, config.description]);
 
   // Auto-save with debounce
   useEffect(() => {
@@ -82,6 +95,7 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
           calEventTypeId: eventTypeId,
           calTimezone: timezone,
           description,
+          transitions,
           calFunctionType: type === 'cal_check_availability' ? 'check_availability' : 'book_appointment',
           content: generateSystemPrompt()
         });
@@ -93,7 +107,7 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
         clearTimeout(autoSaveTimeoutRef.current);
       }
     };
-  }, [nodeTitle, apiKey, eventTypeId, timezone, description, onNodeUpdate, id, type]);
+  }, [nodeTitle, apiKey, eventTypeId, timezone, description, transitions, onNodeUpdate, id, type]);
 
   const generateSystemPrompt = () => {
     const functionType = type === 'cal_check_availability' ? 'check_availability' : 'book_appointment';
@@ -128,6 +142,7 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
         calEventTypeId: eventTypeId,
         calTimezone: timezone,
         description,
+        transitions,
         calFunctionType: type === 'cal_check_availability' ? 'check_availability' : 'book_appointment',
         content: generateSystemPrompt()
       });
@@ -138,54 +153,153 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
     }, 500);
   };
 
+  const addTransition = () => {
+    const defaultLabel = type === 'cal_check_availability' ? 'Show availability' : 'Book appointment';
+    const newTransition: NodeTransition = {
+      id: `transition-${Date.now()}`,
+      label: defaultLabel,
+      triggerType: 'user_response'
+    };
+    const updatedTransitions = [...transitions, newTransition];
+    setTransitions(updatedTransitions);
+    if (onNodeUpdate) {
+      onNodeUpdate(id, { transitions: updatedTransitions });
+    }
+  };
+
+  const removeTransition = (transitionId: string) => {
+    const updatedTransitions = transitions.filter(t => t.id !== transitionId);
+    setTransitions(updatedTransitions);
+    if (onNodeUpdate) {
+      onNodeUpdate(id, { transitions: updatedTransitions });
+    }
+  };
+
+  const updateTransition = (transitionId: string, label: string) => {
+    const updatedTransitions = transitions.map(t =>
+      t.id === transitionId ? { ...t, label } : t
+    );
+    setTransitions(updatedTransitions);
+    if (onNodeUpdate) {
+      onNodeUpdate(id, { transitions: updatedTransitions });
+    }
+  };
+
+  const handleTransitionEdit = (transitionId: string, newLabel: string) => {
+    updateTransition(transitionId, newLabel);
+  };
+
   const isConfigured = apiKey && eventTypeId;
 
+  const inputHandleStyle = {
+    ...getHandleStyle(config.handleColor),
+    left: '-8px',
+  };
+
+  const outputHandleStyle = {
+    ...getHandleStyle(config.handleColor),
+    right: '-8px',
+  };
+
   return (
-    <div className={`relative bg-white rounded-lg min-w-[280px] max-w-[320px] shadow-sm border ${
-      selected ? `${config.borderColor} shadow-md` : 'border-gray-200'
+    <div className={`relative bg-white rounded-xl min-w-[400px] max-w-[500px] shadow-lg border-2 ${
+      selected ? `${config.borderColor}` : 'border-gray-200'
     } transition-all`}>
       
       {/* Header */}
-      <div className={`${config.color} rounded-t-lg p-3 border-b ${config.borderColor.replace('border-', 'border-b-')}`}>
+      <div className={`${config.color} rounded-t-xl px-4 py-3 border-b ${config.borderColor.replace('border-', 'border-b-')}`}>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <IconComponent className={`w-4 h-4 ${config.iconColor}`} />
-            <span className={`${config.iconColor} text-sm font-medium`}>{nodeTitle}</span>
+            <h3 className={`${config.iconColor} text-lg font-semibold`}>{nodeTitle}</h3>
           </div>
           <button
             onClick={() => setIsConfigOpen(!isConfigOpen)}
             className={`p-1 rounded ${config.iconColor} hover:bg-gray-100 transition-colors`}
           >
-            <Settings className="w-3 h-3" />
+            <Settings className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Content */}
-      <div className="p-4">
-        <div className="text-gray-600 text-sm leading-relaxed mb-3">
-          {description}
+      <div className="p-4 space-y-4">
+        {/* Description and Status */}
+        <div className="space-y-3">
+          <div className="text-gray-600 text-sm leading-relaxed">
+            {description}
+          </div>
+          
+          {/* Configuration Status */}
+          <div className="flex items-center gap-2 text-sm">
+            {isConfigured ? (
+              <>
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-green-600">Configured</span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="w-4 h-4 text-amber-500" />
+                <span className="text-amber-600">Needs configuration</span>
+              </>
+            )}
+          </div>
         </div>
-        
-        {/* Configuration Status */}
-        <div className="flex items-center gap-2 text-xs">
-          {isConfigured ? (
-            <>
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              <span className="text-green-600">Configured</span>
-            </>
-          ) : (
-            <>
-              <AlertCircle className="w-3 h-3 text-amber-500" />
-              <span className="text-amber-600">Needs configuration</span>
-            </>
-          )}
+
+        {/* Transition Section - Following WorkflowNode design */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ArrowRight className="w-4 h-4 text-gray-500" />
+              <span className="text-gray-500 text-sm font-medium">Transitions</span>
+            </div>
+            <button
+              onClick={addTransition}
+              className={`p-1 text-gray-500 hover:${config.iconColor} hover:${config.color} rounded`}
+              title="Add transition"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            {transitions.map((transition) => (
+              <div
+                key={transition.id}
+                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100 group hover:bg-gray-100 min-h-[60px]">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full flex-shrink-0"></div>
+                    <input
+                      type="text"
+                      value={transition.label}
+                      onChange={(e) => handleTransitionEdit(transition.id, e.target.value)}
+                      onBlur={handleSave}
+                      className="flex-1 text-sm text-gray-700 bg-transparent border-none outline-none focus:ring-0 hover:bg-white hover:border hover:border-gray-300 rounded px-2 py-1"
+                      placeholder="Transition description..."
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeTransition(transition.id)}
+                    className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-opacity flex-shrink-0"
+                    title="Remove transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+            ))}
+            
+            {transitions.length === 0 && (
+              <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-gray-100">
+                No transitions configured. Click + to add transitions.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Configuration Panel */}
       {isConfigOpen && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50 rounded-b-lg">
+        <div className="border-t border-gray-200 p-4 bg-gray-50 rounded-b-xl">
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -271,18 +385,53 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
         </div>
       )}
       
-      {/* Handles */}
+      {/* Input Handle */}
       <Handle
         type="target"
         position={Position.Left}
-        className={`w-3 h-3 ${config.handleColor} border-2 border-white`}
+        style={{
+          ...inputHandleStyle,
+          top: '50%',
+          zIndex: 10,
+        }}
       />
       
-      <Handle
-        type="source"
-        position={Position.Right}
-        className={`w-3 h-3 ${config.handleColor} border-2 border-white`}
-      />
+      {/* Output Handles - one for each transition */}
+      {transitions.map((transition, index) => {
+        // Calculate position based on component layout:
+        // Header (~60px) + Content padding + Description/Status (~80px) + Transition header (~40px) + transition spacing
+        const baseOffset = 180; // Base offset to start of transitions
+        const transitionHeight = 60; // Height of each transition element
+        const transitionSpacing = 12; // space-y-3 = 12px
+        const handleOffset = baseOffset + (index * (transitionHeight + transitionSpacing)) + (transitionHeight / 2);
+        
+        return (
+          <Handle
+            key={transition.id}
+            type="source"
+            position={Position.Right}
+            id={transition.id}
+            style={{ 
+              ...outputHandleStyle,
+              top: `${handleOffset}px`,
+              zIndex: 10,
+            }}
+          />
+        );
+      })}
+      
+      {/* Default source handle if no transitions */}
+      {transitions.length === 0 && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          style={{
+            ...outputHandleStyle,
+            top: '50%',
+            zIndex: 10,
+          }}
+        />
+      )}
     </div>
   );
 };

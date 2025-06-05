@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { FlowData, FlowNode } from '../../../types';
+import { FlowData, FlowNode } from '../../../../types';
 import { storeFlowData, getFlowData, getActiveFlowsCount } from '../shared-flow-data';
 
 // In-memory storage for active flow data (in production, this would be in a database)
@@ -114,8 +114,8 @@ export async function POST(request: NextRequest) {
               console.log('✅ Successfully parsed flow data from metadata');
               console.log('📊 Flow structure:', {
                 nodeCount: activeFlowData?.nodes?.length || 0,
-                workflowNodes: activeFlowData?.nodes?.filter(n => n.type === 'workflow').length || 0,
-                workflowNodesWithCustomPrompts: activeFlowData?.nodes?.filter(n => 
+                workflowNodes: activeFlowData?.nodes?.filter((n: FlowNode) => n.type === 'workflow').length || 0,
+                workflowNodesWithCustomPrompts: activeFlowData?.nodes?.filter((n: FlowNode) => 
                   n.type === 'workflow' && n.data.customPrompt
                 ).length || 0
               });
@@ -443,13 +443,65 @@ function determineNextNode(flowData: FlowData, currentNodeId: string, userRespon
       return outgoingEdges[0]?.target || null;
 
     case 'cal_check_availability':
-      // For calendar availability check nodes, proceed to next step after showing availability
+      // For calendar availability check nodes, try to match user response to defined transitions
       console.log('📅 Processing calendar availability check node');
+      if (currentNode.data?.transitions && userResponse && outgoingEdges.length > 1) {
+        const responseText = userResponse.toLowerCase().trim();
+        
+        // Try to match response to transition labels
+        for (let i = 0; i < outgoingEdges.length; i++) {
+          const edge = outgoingEdges[i];
+          const transition = currentNode.data.transitions[i];
+          
+          if (transition?.label) {
+            const transitionLabel = transition.label.toLowerCase();
+            
+            // Check for calendar-specific transition matches
+            if ((responseText.includes('book') || responseText.includes('schedule') || responseText.includes('yes') || responseText.includes('confirm') || responseText.includes('perfect')) &&
+                (transitionLabel.includes('book') || transitionLabel.includes('schedule') || transitionLabel.includes('appointment'))) {
+              console.log('✅ Matched booking intent to transition:', transition.label);
+              return edge.target;
+            }
+            if ((responseText.includes('later') || responseText.includes('no') || responseText.includes('not now') || responseText.includes('different time')) &&
+                (transitionLabel.includes('later') || transitionLabel.includes('no') || transitionLabel.includes('different'))) {
+              console.log('✅ Matched "later" response to transition:', transition.label);
+              return edge.target;
+            }
+          }
+        }
+      }
+      // If no specific match, use first edge
       return outgoingEdges[0]?.target || null;
 
     case 'cal_book_appointment':
-      // For appointment booking nodes, proceed to next step after booking
+      // For appointment booking nodes, try to match user response to defined transitions
       console.log('📅 Processing appointment booking node');
+      if (currentNode.data?.transitions && userResponse && outgoingEdges.length > 1) {
+        const responseText = userResponse.toLowerCase().trim();
+        
+        // Try to match response to transition labels
+        for (let i = 0; i < outgoingEdges.length; i++) {
+          const edge = outgoingEdges[i];
+          const transition = currentNode.data.transitions[i];
+          
+          if (transition?.label) {
+            const transitionLabel = transition.label.toLowerCase();
+            
+            // Check for booking confirmation transition matches
+            if ((responseText.includes('confirm') || responseText.includes('yes') || responseText.includes('book') || responseText.includes('proceed')) &&
+                (transitionLabel.includes('confirm') || transitionLabel.includes('book') || transitionLabel.includes('proceed'))) {
+              console.log('✅ Matched booking confirmation to transition:', transition.label);
+              return edge.target;
+            }
+            if ((responseText.includes('cancel') || responseText.includes('no') || responseText.includes('not') || responseText.includes('different')) &&
+                (transitionLabel.includes('cancel') || transitionLabel.includes('no') || transitionLabel.includes('different'))) {
+              console.log('✅ Matched cancellation to transition:', transition.label);
+              return edge.target;
+            }
+          }
+        }
+      }
+      // If no specific match, use first edge
       return outgoingEdges[0]?.target || null;
 
     default:

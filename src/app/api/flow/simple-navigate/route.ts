@@ -171,6 +171,31 @@ function determineNextNode(flowData: any, currentNodeId: string, userResponse?: 
     return outgoingEdges[0]?.target || null;
   }
 
+  // Enhanced logic for Cal nodes with transitions
+  if ((currentNode.type === 'cal_check_availability' || currentNode.type === 'cal_book_appointment') && currentNode.data?.transitions && userResponse) {
+    const responseText = userResponse.toLowerCase().trim();
+    
+    // Match user response to transitions with improved logic
+    for (let i = 0; i < outgoingEdges.length; i++) {
+      const edge = outgoingEdges[i];
+      const transition = currentNode.data.transitions[i];
+      
+      if (transition?.label) {
+        const transitionLabel = transition.label.toLowerCase();
+        
+        // Enhanced matching logic for Cal nodes
+        if (isCalResponseMatch(responseText, transitionLabel, currentNode.type)) {
+          console.log('✅ Matched response to Cal transition:', transition.label);
+          return edge.target;
+        }
+      }
+    }
+    
+    // If no specific match, use first edge as fallback
+    console.log('⚠️ No specific match found for Cal node, using first edge');
+    return outgoingEdges[0]?.target || null;
+  }
+
   // Default: use first edge
   console.log('➡️ Using first edge for node type:', currentNode.type);
   return outgoingEdges[0]?.target || null;
@@ -208,4 +233,33 @@ function isResponseMatch(userResponse: string, transitionLabel: string): boolean
   }
   
   return false;
+}
+
+function isCalResponseMatch(userResponse: string, transitionLabel: string, nodeType: string): boolean {
+  if (nodeType === 'cal_check_availability') {
+    // Check availability node transitions
+    if ((userResponse.includes('book') || userResponse.includes('schedule') || userResponse.includes('yes') || userResponse.includes('confirm') || userResponse.includes('perfect')) &&
+        (transitionLabel.includes('book') || transitionLabel.includes('schedule') || transitionLabel.includes('appointment'))) {
+      return true;
+    }
+    if ((userResponse.includes('later') || userResponse.includes('no') || userResponse.includes('not now') || userResponse.includes('different time')) &&
+        (transitionLabel.includes('later') || transitionLabel.includes('no') || transitionLabel.includes('different'))) {
+      return true;
+    }
+  }
+  
+  if (nodeType === 'cal_book_appointment') {
+    // Book appointment node transitions
+    if ((userResponse.includes('confirm') || userResponse.includes('yes') || userResponse.includes('book') || userResponse.includes('proceed')) &&
+        (transitionLabel.includes('confirm') || transitionLabel.includes('book') || transitionLabel.includes('proceed'))) {
+      return true;
+    }
+    if ((userResponse.includes('cancel') || userResponse.includes('no') || userResponse.includes('not') || userResponse.includes('different')) &&
+        (transitionLabel.includes('cancel') || transitionLabel.includes('no') || transitionLabel.includes('different'))) {
+      return true;
+    }
+  }
+  
+  // Fallback to general matching
+  return isResponseMatch(userResponse, transitionLabel);
 } 
