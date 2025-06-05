@@ -1,0 +1,170 @@
+{
+  "nodes": [
+    {
+      "id": "welcome-node",
+      "type": "workflow",
+      "position": {"x": 100, "y": 100},
+      "data": {
+        "nodeTitle": "Welcome Message",
+        "customPrompt": "Hello! I am Tony from SmileBright Dental Clinic. Thank you for calling! How can I help you today? Are you looking to schedule an appointment or do you have questions about our services?",
+        "transitions": [
+          {
+            "id": "transition-to-availability",
+            "label": "Check appointment availability",
+            "triggerType": "user_response",
+            "triggerValue": "appointment|schedule|book|available|dentist|checkup|cleaning|consultation",
+            "description": "User wants to schedule an appointment"
+          }
+        ]
+      }
+    },
+    {
+      "id": "check-availability-node",
+      "type": "cal_check_availability",
+      "position": {"x": 400, "y": 100}, 
+      "data": {
+        "nodeTitle": "Check Dental Appointment Availability",
+        "customPrompt": "Perfect! Let me check our available appointment slots for you. I'm accessing our real-time calendar now to find the best available times. The available slots will be presented in a speech-friendly format so you can easily understand your options. What dates work best for you? I can check availability for this week, next week, or any specific dates you prefer.",
+        "calApiKey": "cal_live_ad0e0bc39a4d9d0bb6f9cb0961192b3b",
+        "calEventTypeId": "1575900",
+        "calTimezone": "America/Los_Angeles",
+        "transitions": [
+          {
+            "id": "transition-to-booking-confirmation",
+            "label": "Book appointment",
+            "triggerType": "user_response",
+            "triggerValue": "book|schedule|yes|confirm|that works|perfect|option|slot",
+            "description": "User wants to book a specific appointment time"
+          },
+          {
+            "id": "transition-different-dates",
+            "label": "Check different dates",
+            "triggerType": "user_response",
+            "triggerValue": "different|other|next|week|month|later",
+            "description": "User wants to check different dates"
+          }
+        ]
+      }
+    },
+    {
+      "id": "booking-confirmation-node",
+      "type": "cal_booking_confirmation",
+      "position": {"x": 700, "y": 100},
+      "data": {
+        "nodeTitle": "Booking Confirmation with Voice Verification", 
+        "customPrompt": "Excellent choice! Now I'll help you book that appointment. To ensure accuracy with your booking details, I'll need to collect your information carefully. I'll ask you to spell out your name and email address so I can make sure everything is recorded correctly for your appointment confirmation.",
+        "calApiKey": "cal_live_ad0e0bc39a4d9d0bb6f9cb0961192b3b",
+        "calEventTypeId": "1575900",
+        "calTimezone": "America/Los_Angeles",
+        "transitions": [
+          {
+            "id": "transition-to-completion",
+            "label": "Booking completed",
+            "triggerType": "user_response",
+            "triggerValue": "completed|booked|confirmed|yes|perfect|thank you",
+            "description": "Booking has been completed successfully"
+          },
+          {
+            "id": "transition-to-restart",
+            "label": "Restart booking",
+            "triggerType": "user_response",
+            "triggerValue": "restart|cancel|no|different|wrong|mistake",
+            "description": "User wants to restart the booking process"
+          }
+        ]
+      }
+    },
+    {
+      "id": "completion-node",
+      "type": "workflow",
+      "position": {"x": 1000, "y": 100},
+      "data": {
+        "nodeTitle": "Appointment Confirmation Complete",
+        "customPrompt": "Perfect! Your dental appointment has been successfully booked and you should receive a confirmation email shortly. Is there anything else I can help you with today? If you need to reschedule or have any questions before your appointment, please don't hesitate to call us. We look forward to seeing you at SmileBright Dental Clinic!"
+      }
+    },
+    {
+      "id": "different-dates-node", 
+      "type": "workflow",
+      "position": {"x": 400, "y": 300},
+      "data": {
+        "nodeTitle": "Check Different Dates",
+        "customPrompt": "Of course! I'd be happy to check other dates for you. What specific dates would you like me to check? You can tell me next week, a specific day, or a date range that works better for you.",
+        "transitions": [
+          {
+            "id": "back-to-availability",
+            "label": "Check new dates",
+            "triggerType": "user_response",
+            "triggerValue": "check|look|search|available|next|week|month",
+            "description": "User provides new dates to check"
+          }
+        ]
+      }
+    },
+    {
+      "id": "restart-booking-node",
+      "type": "workflow", 
+      "position": {"x": 700, "y": 300},
+      "data": {
+        "nodeTitle": "Restart Booking Process",
+        "customPrompt": "No problem! Let me help you start the booking process over. Would you like to select a different appointment time, or check availability for different dates?",
+        "transitions": [
+          {
+            "id": "back-to-availability-restart",
+            "label": "Check availability again",
+            "triggerType": "user_response", 
+            "triggerValue": "availability|different|time|check|dates|schedule",
+            "description": "User wants to check availability again"
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "welcome-node",
+      "target": "check-availability-node",
+      "type": "default"
+    },
+    {
+      "id": "e2", 
+      "source": "check-availability-node",
+      "target": "booking-confirmation-node",
+      "type": "default"
+    },
+    {
+      "id": "e3",
+      "source": "booking-confirmation-node", 
+      "target": "completion-node",
+      "type": "default"
+    },
+    {
+      "id": "e4",
+      "source": "check-availability-node",
+      "target": "different-dates-node",
+      "sourceHandle": "transition-different-dates",
+      "type": "default"
+    },
+    {
+      "id": "e5",
+      "source": "different-dates-node",
+      "target": "check-availability-node", 
+      "type": "default"
+    },
+    {
+      "id": "e6",
+      "source": "booking-confirmation-node",
+      "target": "restart-booking-node",
+      "sourceHandle": "transition-to-restart", 
+      "type": "default"
+    },
+    {
+      "id": "e7",
+      "source": "restart-booking-node",
+      "target": "check-availability-node",
+      "type": "default"
+    }
+  ],
+  "globalPrompt": "You are Tony, a friendly and professional dental assistant at SmileBright Dental Clinic. You help patients schedule appointments through our advanced calendar system. When checking availability, present time slots in a clear, speech-friendly format. For bookings, guide patients through word-by-word confirmation of their details to ensure accuracy. Always be patient and helpful throughout the process."
+} 

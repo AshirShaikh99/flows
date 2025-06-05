@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'message' | 'question' | 'condition' | 'workflow' | 'conversation' | 'function' | 'call_transfer' | 'press_digit' | 'logic_split' | 'sms' | 'ending' | 'cal_check_availability' | 'cal_book_appointment';
+export type NodeType = 'start' | 'message' | 'question' | 'condition' | 'workflow' | 'conversation' | 'function' | 'call_transfer' | 'press_digit' | 'logic_split' | 'sms' | 'ending' | 'cal_check_availability' | 'cal_book_appointment' | 'cal_booking_confirmation';
 
 export interface FlowNode {
   id: string;
@@ -23,7 +23,7 @@ export interface NodeData {
   calApiKey?: string;
   calEventTypeId?: string;
   calTimezone?: string;
-  calFunctionType?: 'check_availability' | 'book_appointment';
+  calFunctionType?: 'check_availability' | 'book_appointment' | 'booking_confirmation';
 }
 
 export interface NodeTransition {

@@ -222,7 +222,7 @@ export class CalService {
 
 
   /**
-   * Format availability response for the agent
+   * Format availability response for the agent (speech-optimized)
    */
   formatAvailabilityResponse(slots: AvailabilitySlot[]): string {
     const availableSlots = slots.filter(slot => slot.available);
@@ -231,13 +231,85 @@ export class CalService {
       return "I'm sorry, but there are no available time slots for the requested dates. Please try selecting different dates, and I'll check our calendar again for you.";
     }
 
-    const response = "Great news! I found several available appointment slots for you:\n\n" +
-      availableSlots.map((slot, index) => 
-        `${index + 1}. ${slot.date} at ${slot.time}`
-      ).join('\n') +
-      "\n\nPlease tell me which time slot works best for you, and I'll be happy to book that appointment for you right away. You can just say the number or tell me the specific day and time you prefer.";
+    // Format slots for speech with clear pauses and pronunciation
+    let response = "Great news! I found several available appointment slots for you. Here are your options:\n\n";
+    
+    availableSlots.forEach((slot, index) => {
+      // Format time for better speech (e.g., "2:00 PM" becomes "two o'clock PM")
+      const speechTime = this.formatTimeForSpeech(slot.time);
+      // Format date for better speech (e.g., "Monday, January 15th, 2024")
+      const speechDate = this.formatDateForSpeech(slot.date);
+      
+      response += `Option ${index + 1}: ${speechDate} at ${speechTime}\n`;
+    });
+
+    response += "\nPlease tell me which time slot works best for you by saying the option number, or tell me the specific day and time you prefer. I'll be happy to book that appointment for you right away.";
 
     return response;
+  }
+
+  /**
+   * Format time for better speech pronunciation
+   */
+  private formatTimeForSpeech(time: string): string {
+    // Convert "2:00 PM" to "two o'clock PM", "2:30 PM" to "two thirty PM"
+    const timeMatch = time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!timeMatch) return time;
+
+    const hour = parseInt(timeMatch[1]);
+    const minute = timeMatch[2];
+    const ampm = timeMatch[3].toUpperCase();
+
+    let hourText = '';
+    switch (hour) {
+      case 1: hourText = 'one'; break;
+      case 2: hourText = 'two'; break;
+      case 3: hourText = 'three'; break;
+      case 4: hourText = 'four'; break;
+      case 5: hourText = 'five'; break;
+      case 6: hourText = 'six'; break;
+      case 7: hourText = 'seven'; break;
+      case 8: hourText = 'eight'; break;
+      case 9: hourText = 'nine'; break;
+      case 10: hourText = 'ten'; break;
+      case 11: hourText = 'eleven'; break;
+      case 12: hourText = 'twelve'; break;
+      default: hourText = hour.toString();
+    }
+
+    if (minute === '00') {
+      return `${hourText} o'clock ${ampm}`;
+    } else if (minute === '15') {
+      return `${hourText} fifteen ${ampm}`;
+    } else if (minute === '30') {
+      return `${hourText} thirty ${ampm}`;
+    } else if (minute === '45') {
+      return `${hourText} forty-five ${ampm}`;
+    } else {
+      return `${hourText} ${minute} ${ampm}`;
+    }
+  }
+
+  /**
+   * Format date for better speech pronunciation
+   */
+  private formatDateForSpeech(date: string): string {
+    // Convert "Monday, January 15, 2024" to "Monday, January fifteenth, twenty twenty-four"
+    const dateObj = new Date(date);
+    
+    const weekday = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+    const month = dateObj.toLocaleDateString('en-US', { month: 'long' });
+    const day = dateObj.getDate();
+    const year = dateObj.getFullYear();
+
+    // Convert day number to ordinal for speech
+    let dayText = '';
+    if (day === 1 || day === 21 || day === 31) dayText = `${day}st`;
+    else if (day === 2 || day === 22) dayText = `${day}nd`;
+    else if (day === 3 || day === 23) dayText = `${day}rd`;
+    else dayText = `${day}th`;
+
+    return `${weekday}, ${month} ${dayText}`;
   }
 
   /**

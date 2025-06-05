@@ -1,0 +1,54 @@
+{
+  "callId": "start-1749160593487",
+  "flowData": {
+    "nodes": [
+      {
+        "id": "welcome-node",
+        "type": "workflow",
+        "position": {"x": 100, "y": 100},
+        "data": {
+          "nodeTitle": "Welcome Message", 
+          "customPrompt": "Hello! I am Tony from SmileBright Dental Clinic. Thank you for calling! How can I help you today? Are you looking to schedule an appointment or do you have questions about our services?",
+          "transitions": [
+            {
+              "id": "transition-to-availability",
+              "label": "Check appointment availability",
+              "triggerType": "user_response", 
+              "triggerValue": "appointment|schedule|book|available|dentist|checkup|cleaning|consultation|slots|doctors|find",
+              "description": "User wants to schedule an appointment or check availability"
+            }
+          ]
+        }
+      },
+      {
+        "id": "check-availability-node",
+        "type": "cal_check_availability",
+        "position": {"x": 400, "y": 100},
+        "data": {
+          "nodeTitle": "Check Dental Appointment Availability",
+          "customPrompt": "Perfect! Let me check our available appointment slots for you. I am now accessing our real-time calendar system. CRITICAL: I MUST call the checkCalendarAvailability tool with proper startDate and endDate parameters to fetch actual availability data from our Cal.com API. I will then speak the results in a clear, speech-friendly format with specific times and dates. What dates work best for you? I can check availability for this week, next week, or any specific dates you prefer.",
+          "calApiKey": "cal_live_ad0e0bc39a4d9d0bb6f9cb0961192b3b", 
+          "calEventTypeId": "1575900",
+          "calTimezone": "America/Los_Angeles",
+          "transitions": [
+            {
+              "id": "transition-to-booking",
+              "label": "Book appointment", 
+              "triggerType": "user_response",
+              "triggerValue": "book|schedule|yes|confirm|that works|perfect|option|slot",
+              "description": "User wants to book a specific appointment time"
+            }
+          ]
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "welcome-node", 
+        "target": "check-availability-node",
+        "type": "default"
+      }
+    ]
+  }
+} 

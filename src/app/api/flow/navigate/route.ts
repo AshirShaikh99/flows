@@ -504,6 +504,37 @@ function determineNextNode(flowData: FlowData, currentNodeId: string, userRespon
       // If no specific match, use first edge
       return outgoingEdges[0]?.target || null;
 
+    case 'cal_booking_confirmation':
+      // For booking confirmation nodes, try to match user response to defined transitions
+      console.log('📋 Processing booking confirmation node');
+      if (currentNode.data?.transitions && userResponse && outgoingEdges.length > 1) {
+        const responseText = userResponse.toLowerCase().trim();
+        
+        // Try to match response to transition labels
+        for (let i = 0; i < outgoingEdges.length; i++) {
+          const edge = outgoingEdges[i];
+          const transition = currentNode.data.transitions[i];
+          
+          if (transition?.label) {
+            const transitionLabel = transition.label.toLowerCase();
+            
+            // Check for booking completion transition matches
+            if ((responseText.includes('completed') || responseText.includes('booked') || responseText.includes('confirmed') || responseText.includes('yes')) &&
+                (transitionLabel.includes('completed') || transitionLabel.includes('booked') || transitionLabel.includes('confirmed') || transitionLabel.includes('success'))) {
+              console.log('✅ Matched booking completion to transition:', transition.label);
+              return edge.target;
+            }
+            if ((responseText.includes('cancel') || responseText.includes('no') || responseText.includes('restart') || responseText.includes('different')) &&
+                (transitionLabel.includes('cancel') || transitionLabel.includes('no') || transitionLabel.includes('restart') || transitionLabel.includes('different'))) {
+              console.log('✅ Matched booking cancellation to transition:', transition.label);
+              return edge.target;
+            }
+          }
+        }
+      }
+      // If no specific match, use first edge
+      return outgoingEdges[0]?.target || null;
+
     default:
       // For other node types, use first edge
       console.log('🔄 Generic node transition');
@@ -587,20 +618,27 @@ Use the 'changeStage' tool when ready to continue to the next step.`;
       return `${basePrompt}
 
 CALENDAR AVAILABILITY CHECK:
-${node.data?.content || 'Check calendar availability and provide available time slots to the user.'}
+${node.data?.content || node.data?.customPrompt || 'Perfect! Let me check our available appointment slots for you.'}
 
-You have access to a 'checkCalendarAvailability' tool to check available time slots. When users ask about availability:
-1. Ask for their preferred date or date range if not provided
-2. Use the checkCalendarAvailability tool with the startDate parameter (and optionally endDate)
-3. Present the available time slots to the user in a friendly format
-4. After showing availability, use the 'changeStage' tool to continue the conversation flow
+IMPORTANT: You MUST use the 'checkCalendarAvailability' tool to check available time slots. Here's the process:
+
+1. If the user hasn't provided a specific date, ask for their preferred date or date range
+2. IMMEDIATELY use the checkCalendarAvailability tool with:
+   - startDate: The date they want (YYYY-MM-DD format)
+   - endDate: Optional end date for range checking
+   - nodeId: "${node.id}"
+
+3. The tool will return speech-optimized availability slots (e.g., "Option 1: Monday, January 15th at two o'clock PM")
+4. Present these available slots to the user exactly as returned by the tool
+5. Ask which option they prefer
+6. Use the 'changeStage' tool to continue to booking when they choose a slot
 
 Cal.com Configuration:
 - API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
 - Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
 - Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
 
-Always ask for confirmation before proceeding to booking.`;
+CRITICAL: You must call the checkCalendarAvailability tool to get real availability data. Do not make up availability information.`;
 
     case 'cal_book_appointment':
       return `${basePrompt}
@@ -621,6 +659,36 @@ Cal.com Configuration:
 - Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
 
 Always confirm booking details before making the appointment and provide clear confirmation after booking.`;
+
+    case 'cal_booking_confirmation':
+      return `${basePrompt}
+
+BOOKING CONFIRMATION WITH VOICE VERIFICATION:
+${node.data?.content || 'Handle detailed booking confirmation with word-by-word verification of customer details.'}
+
+You have access to a 'bookingConfirmation' tool to handle step-by-step booking confirmation. This process ensures accurate data collection for voice interactions:
+
+CONFIRMATION PROCESS:
+1. Start with confirmationStep: 'collect' to begin the process
+2. Get first name spelled letter by letter (confirmationStep: 'confirm_first_name')
+3. Get last name spelled letter by letter (confirmationStep: 'confirm_last_name') 
+4. Get email spelled character by character (confirmationStep: 'confirm_email')
+5. Final confirmation of all details (confirmationStep: 'final_confirmation')
+6. Complete booking and provide confirmation
+
+IMPORTANT INSTRUCTIONS:
+- Always ask users to spell names and email addresses letter by letter/character by character
+- Be patient and confirm each step clearly
+- For email addresses, guide users to say "at sign" for @ and "dot" for periods
+- Repeat back what you heard to confirm accuracy
+- Only proceed to booking after user confirms all details are correct
+
+Cal.com Configuration:
+- API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
+- Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
+- Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
+
+Always use the bookingConfirmation tool to handle each step of the confirmation process.`;
 
     default:
       return `${basePrompt}
@@ -771,6 +839,75 @@ function generateStageTools(node?: FlowNode): ToolConfig[] {
         ],
         http: {
           baseUrlPattern: `${baseUrl}/api/cal/book-appointment`,
+          httpMethod: 'POST'
+        }
+      }
+    });
+  }
+
+  if (node?.type === 'cal_booking_confirmation') {
+    tools.push({
+      temporaryTool: {
+        modelToolName: 'bookingConfirmation',
+        description: 'Handle step-by-step booking confirmation with word-by-word name and email verification',
+        dynamicParameters: [
+          {
+            name: 'name',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The name of the person (collected step by step)'
+            },
+            required: false
+          },
+          {
+            name: 'email',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The email address of the person (collected step by step)'
+            },
+            required: false
+          },
+          {
+            name: 'startDateTime',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The start date and time for the appointment (ISO 8601 format)'
+            },
+            required: false
+          },
+          {
+            name: 'duration',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'Duration of the appointment in minutes'
+            },
+            required: false
+          },
+          {
+            name: 'confirmationStep',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'Current step in the confirmation process: collect, confirm_first_name, confirm_last_name, confirm_email, final_confirmation'
+            },
+            required: true
+          },
+          {
+            name: 'nodeId',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The current node ID'
+            },
+            required: true
+          }
+        ],
+        http: {
+          baseUrlPattern: `${baseUrl}/api/cal/booking-confirmation`,
           httpMethod: 'POST'
         }
       }

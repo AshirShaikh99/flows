@@ -45,13 +45,39 @@ export async function POST(request: NextRequest) {
     // Get node configuration from the stored flow data using real call ID only
     console.log('🔍 Looking for flow data with call ID:', callId);
     
-    const flowData = getStoredFlowData(callId);
+    let flowData = getStoredFlowData(callId);
+    
+    // Fallback: Try to fetch from UltraVox API if not found in memory
+    if (!flowData) {
+      console.log('🔄 Flow data not found in memory, trying UltraVox API...');
+      try {
+        const callResponse = await fetch(`https://api.ultravox.ai/api/calls/${callId}`, {
+          headers: {
+            'X-API-Key': process.env.NEXT_PUBLIC_ULTRAVOX_API_KEY || '',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (callResponse.ok) {
+          const callData = await callResponse.json();
+          if (callData.metadata?.flowData) {
+            flowData = JSON.parse(callData.metadata.flowData);
+            console.log('✅ Retrieved flow data from UltraVox API');
+          }
+        } else {
+          console.log('⚠️ Could not fetch call data from UltraVox API:', callResponse.status);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching flow data from UltraVox API:', error);
+      }
+    }
     
     if (!flowData) {
+      console.error('❌ No flow data found for call:', callId);
       return NextResponse.json(
         { 
           error: 'Flow data not found',
-          responseText: "I'm sorry, I'm having trouble accessing the calendar configuration. Please contact support."
+          responseText: "I'm sorry, I'm having trouble accessing the calendar configuration. Please make sure the call is properly initialized with flow data. You can try asking for availability again in a moment."
         },
         { status: 500 }
       );

@@ -31,6 +31,16 @@ const getNodeConfig = (type: string) => {
         title: 'Book Appointment',
         description: 'Book appointment using Cal.com'
       };
+    case 'cal_booking_confirmation':
+      return {
+        icon: Calendar,
+        color: 'bg-purple-50',
+        iconColor: 'text-purple-600',
+        borderColor: 'border-purple-300',
+        handleColor: '#8b5cf6', // purple-500
+        title: 'Booking Confirmation',
+        description: 'Confirm booking details word-by-word'
+      };
     default:
       return {
         icon: Calendar,
@@ -110,9 +120,7 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
   }, [nodeTitle, apiKey, eventTypeId, timezone, description, transitions, onNodeUpdate, id, type]);
 
   const generateSystemPrompt = () => {
-    const functionType = type === 'cal_check_availability' ? 'check_availability' : 'book_appointment';
-    
-    if (functionType === 'check_availability') {
+    if (type === 'cal_check_availability') {
       return `When users ask for availability, check the calendar and provide available slots.
 
 Cal.com API Configuration:
@@ -121,8 +129,33 @@ Cal.com API Configuration:
 - Timezone: ${timezone}
 
 Use the 'changeStage' tool when ready to continue to the next step in the conversation flow.`;
-    } else {
+    } else if (type === 'cal_book_appointment') {
       return `When users ask to book an appointment, book it on the calendar.
+
+Cal.com API Configuration:
+- API Key: ${apiKey ? '***configured***' : 'NOT SET'}
+- Event Type ID: ${eventTypeId || 'NOT SET'}
+- Timezone: ${timezone}
+
+Use the 'changeStage' tool when ready to continue to the next step in the conversation flow.`;
+    } else if (type === 'cal_booking_confirmation') {
+      return `Handle detailed booking confirmation with word-by-word verification of customer details for voice interactions.
+
+Use the 'bookingConfirmation' tool to guide users through step-by-step confirmation:
+1. Collect user details with spelling confirmation
+2. Verify name letter by letter
+3. Verify email character by character  
+4. Final confirmation before booking
+5. Complete the booking process
+
+Cal.com API Configuration:
+- API Key: ${apiKey ? '***configured***' : 'NOT SET'}
+- Event Type ID: ${eventTypeId || 'NOT SET'}
+- Timezone: ${timezone}
+
+Use the 'changeStage' tool when ready to continue to the next step in the conversation flow.`;
+    } else {
+      return `Cal.com integration function.
 
 Cal.com API Configuration:
 - API Key: ${apiKey ? '***configured***' : 'NOT SET'}
@@ -136,6 +169,13 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
   const handleSave = () => {
     setIsSaving(true);
     if (onNodeUpdate) {
+      let calFunctionType: 'check_availability' | 'book_appointment' | 'booking_confirmation' = 'book_appointment';
+      if (type === 'cal_check_availability') {
+        calFunctionType = 'check_availability';
+      } else if (type === 'cal_booking_confirmation') {
+        calFunctionType = 'booking_confirmation';
+      }
+      
       onNodeUpdate(id, {
         nodeTitle,
         calApiKey: apiKey,
@@ -143,7 +183,7 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
         calTimezone: timezone,
         description,
         transitions,
-        calFunctionType: type === 'cal_check_availability' ? 'check_availability' : 'book_appointment',
+        calFunctionType,
         content: generateSystemPrompt()
       });
     }
@@ -154,7 +194,15 @@ Use the 'changeStage' tool when ready to continue to the next step in the conver
   };
 
   const addTransition = () => {
-    const defaultLabel = type === 'cal_check_availability' ? 'Show availability' : 'Book appointment';
+    let defaultLabel = 'Continue';
+    if (type === 'cal_check_availability') {
+      defaultLabel = 'Show availability';
+    } else if (type === 'cal_book_appointment') {
+      defaultLabel = 'Book appointment';
+    } else if (type === 'cal_booking_confirmation') {
+      defaultLabel = 'Booking completed';
+    }
+    
     const newTransition: NodeTransition = {
       id: `transition-${Date.now()}`,
       label: defaultLabel,
