@@ -228,14 +228,14 @@ export class CalService {
     const availableSlots = slots.filter(slot => slot.available);
     
     if (availableSlots.length === 0) {
-      return "I'm sorry, but there are no available time slots for the requested dates. Please try selecting different dates.";
+      return "I'm sorry, but there are no available time slots for the requested dates. Please try selecting different dates, and I'll check our calendar again for you.";
     }
 
-    const response = "Here are the available time slots:\n\n" +
+    const response = "Great news! I found several available appointment slots for you:\n\n" +
       availableSlots.map((slot, index) => 
         `${index + 1}. ${slot.date} at ${slot.time}`
       ).join('\n') +
-      "\n\nWhich time slot would you prefer?";
+      "\n\nPlease tell me which time slot works best for you, and I'll be happy to book that appointment for you right away. You can just say the number or tell me the specific day and time you prefer.";
 
     return response;
   }

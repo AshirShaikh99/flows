@@ -146,8 +146,7 @@ function enhanceCallConfigForStages(originalConfig: UltravoxCallConfig): Ultravo
   // Generate enhanced system prompt for call stages
   const enhancedSystemPrompt = generateCallStagesSystemPrompt(
     originalConfig.systemPrompt,
-    initialNodeId,
-    'CALL_ID_REQUIRED' // This will be replaced by actual call ID by Ultravox
+    initialNodeId
   );
 
   return {
@@ -165,8 +164,7 @@ function enhanceCallConfigForStages(originalConfig: UltravoxCallConfig): Ultravo
 
 function generateCallStagesSystemPrompt(
   originalPrompt: string,
-  initialNodeId: string,
-  callId: string
+  initialNodeId: string
 ): string {
   return `You are an AI assistant helping users navigate through a conversational flow.
       
@@ -179,7 +177,6 @@ ${originalPrompt}
 You have access to a 'changeStage' tool that will automatically determine the next node based on the conversation flow and user responses. When calling this tool:
 - Include the user's response in the 'userResponse' parameter
 - Include the current node ID '${initialNodeId}' in the 'currentNodeId' parameter
-- CRITICAL: Include the call ID '${callId}' in the 'callId' parameter
 - The system will automatically determine and transition to the appropriate next node
 
 IMPORTANT: Follow the workflow instructions above. This is your primary directive.`;

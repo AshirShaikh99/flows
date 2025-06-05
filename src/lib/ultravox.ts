@@ -792,7 +792,8 @@ The tool will automatically determine the next node.`;
                 description: 'The current node ID'
               },
               required: true
-            }
+            },
+
           ],
           http: {
             baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/cal/book-appointment`,

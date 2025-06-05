@@ -1,0 +1,34 @@
+{
+  "nodes": [
+    {
+      "id": "workflow-start",
+      "type": "workflow",
+      "data": {
+        "prompt": "You are Tony from SmileBright Dental Clinic. When someone asks about appointments or availability, use the checkCalendarAvailability tool to check our schedule. Be friendly and helpful.",
+        "transitions": [
+          {
+            "trigger": "availability|schedule|appointment|dentist|checkup|book|available",
+            "targetNodeId": "check-availability-1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "check-availability-1", 
+      "type": "cal_check_availability",
+      "data": {
+        "calApiKey": "cal_live_ad0e0bc39a4d9d0bb6f9cb0961192b3b",
+        "calEventTypeId": "1575900", 
+        "calTimezone": "America/Los_Angeles"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "workflow-start",
+      "target": "check-availability-1",
+      "type": "default"
+    }
+  ]
+} 

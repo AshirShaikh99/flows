@@ -5,9 +5,17 @@ import { getFlowData } from '../../flow/shared-flow-data';
 
 export async function POST(request: NextRequest) {
   try {
-    const { startDate, endDate, nodeId, callId } = await request.json();
+    const { startDate, endDate, nodeId } = await request.json();
 
-    console.log('🗓️ Check availability request:', { startDate, endDate, nodeId, callId });
+    // Try to get call ID from UltraVox headers
+    const callId = request.headers.get('x-ultravox-call-id') || 
+                   request.headers.get('ultravox-call-id') ||
+                   request.headers.get('x-call-id') ||
+                   request.headers.get('call-id');
+
+    console.log('🗓️ Check availability request:', { startDate, endDate, nodeId });
+    console.log('🔍 Call ID from headers:', callId);
+    console.log('📋 All headers:', Object.fromEntries(request.headers.entries()));
 
     // Validate required parameters
     if (!startDate) {
@@ -24,16 +32,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get node configuration from the stored flow data
-    // Try to get call ID from multiple sources
-    const effectiveCallId = callId || 
-                           request.headers.get('x-call-id') || 
-                           request.headers.get('call-id') ||
-                           request.headers.get('ultravox-call-id');
+    if (!callId) {
+      return NextResponse.json(
+        { 
+          error: 'Call ID not found in headers. Unable to retrieve flow data.',
+          responseText: "I'm sorry, I'm having trouble accessing the session information. Please contact support."
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get node configuration from the stored flow data using real call ID only
+    console.log('🔍 Looking for flow data with call ID:', callId);
     
-    console.log('🔍 Attempting to find flow data with call ID:', effectiveCallId);
-    
-    const flowData = getStoredFlowData(effectiveCallId);
+    const flowData = getStoredFlowData(callId);
     
     if (!flowData) {
       return NextResponse.json(
@@ -166,35 +178,23 @@ export async function POST(request: NextRequest) {
 
 // Helper function to get stored flow data
 // Uses the shared flow data storage system
-function getStoredFlowData(preferredCallId?: string) {
+function getStoredFlowData(callId?: string) {
   try {
-    // If we have a specific call ID, try that first
-    if (preferredCallId) {
-      console.log('🔍 Trying preferred call ID:', preferredCallId);
-      const flowData = getFlowData(preferredCallId);
-      if (flowData) {
-        console.log('✅ Found flow data for preferred call ID:', preferredCallId);
-        return flowData;
-      }
+    if (!callId) {
+      console.log('❌ No call ID provided for flow data retrieval');
+      return null;
     }
     
-    // Fallback: Try common patterns for demo/testing
-    const fallbackPatterns = [
-      'dentist-demo-123', 
-      'test-call-123', 
-      'call-1234567890'
-    ];
+    console.log('🔍 Looking for flow data with call ID:', callId);
+    const flowData = getFlowData(callId);
     
-    for (const callId of fallbackPatterns) {
-      const flowData = getFlowData(callId);
-      if (flowData) {
-        console.log('✅ Found flow data for fallback call ID:', callId);
-        return flowData;
-      }
+    if (flowData) {
+      console.log('✅ Found flow data for call ID:', callId);
+      return flowData;
+    } else {
+      console.log('❌ No flow data found for call ID:', callId);
+      return null;
     }
-    
-    console.log('❌ No flow data found for any call IDs');
-    return null;
   } catch (error) {
     console.error('Error retrieving flow data:', error);
     return null;
