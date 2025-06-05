@@ -458,15 +458,15 @@ const FlowBuilder: React.FC = () => {
       nds.map((node) => {
         // Only update if the node doesn't have onNodeUpdate or it's different
         if (!node.data.onNodeUpdate) {
-          const updatedNode = {
-            ...node,
-            data: {
-              ...node.data,
-              onNodeUpdate: onNodeUpdate,
-            },
-          };
+        const updatedNode = {
+          ...node,
+          data: {
+            ...node.data,
+            onNodeUpdate: onNodeUpdate,
+          },
+        };
           console.log('📝 Added onNodeUpdate to node:', node.id);
-          return updatedNode;
+        return updatedNode;
         }
         return node;
       })

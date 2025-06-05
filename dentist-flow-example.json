@@ -1,0 +1,87 @@
+{
+  "callId": "dentist-demo-123",
+  "flowData": {
+    "nodes": [
+      {
+        "id": "start-node",
+        "type": "start",
+        "position": {"x": 50, "y": 100},
+        "data": {
+          "nodeTitle": "Start"
+        }
+      },
+      {
+        "id": "welcome-node",
+        "type": "workflow", 
+        "position": {"x": 300, "y": 100},
+        "data": {
+          "nodeTitle": "Dental Clinic Greeting",
+          "customPrompt": "Hello! I am Tony from SmileBright Dental Clinic. Thank you for calling! How can I help you today? Are you looking to schedule an appointment or do you have questions about our services? If you want to check availability or schedule an appointment, I have access to our real-time calendar and can show you available time slots.",
+          "transitions": [
+            {
+              "id": "transition-to-availability",
+              "label": "Check availability",
+              "triggerType": "user_response",
+              "triggerValue": "availability|schedule|appointment|dentist|checkup|available|calendar|booking|book",
+              "description": "User wants to check availability or schedule an appointment"
+            }
+          ]
+        }
+      },
+      {
+        "id": "check-availability-node",
+        "type": "cal_check_availability",
+        "position": {"x": 600, "y": 100}, 
+        "data": {
+          "nodeTitle": "Check Dental Appointment Availability",
+          "customPrompt": "Perfect! Let me check our available appointment slots for you. I'm accessing our real-time calendar now to find the best available times. What dates work best for you? I can check availability for this week, next week, or any specific dates you prefer.",
+          "calApiKey": "cal_live_ad0e0bc39a4d9d0bb6f9cb0961192b3b",
+          "calEventTypeId": "1575900",
+          "calTimezone": "America/Los_Angeles",
+          "transitions": [
+            {
+              "id": "transition-to-booking",
+              "label": "Book appointment",
+              "triggerType": "user_response",
+              "triggerValue": "book|schedule|yes|confirm|that works|perfect",
+              "description": "User wants to book a specific appointment time"
+            }
+          ]
+        }
+      },
+      {
+        "id": "booking-confirmation",
+        "type": "workflow",
+        "position": {"x": 900, "y": 100},
+        "data": {
+          "nodeTitle": "Booking Confirmation", 
+          "customPrompt": "Perfect! I will help you book that appointment. Can you please provide your full name and email address so I can confirm your dental appointment booking?"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "start-node",
+        "target": "welcome-node",
+        "id": "edge-start-to-welcome"
+      },
+      {
+        "source": "welcome-node",
+        "sourceHandle": "transition-to-availability", 
+        "target": "check-availability-node",
+        "id": "edge-welcome-to-availability"
+      },
+      {
+        "source": "check-availability-node",
+        "sourceHandle": "transition-to-booking",
+        "target": "booking-confirmation", 
+        "id": "edge-availability-to-booking"
+      }
+    ],
+    "globalPrompt": "You are Tony, a friendly dental clinic receptionist at SmileBright Dental Clinic. When users ask about availability, appointments, scheduling, or checkups, automatically use the changeStage tool to move to the check-availability-node, then use the checkCalendarAvailability tool to show real available appointment times. Be proactive in checking the calendar and helpful in guiding patients through scheduling appointments.",
+    "ultravoxSettings": {
+      "voice": "Mark",
+      "temperature": 0.4
+    }
+  }
+} 

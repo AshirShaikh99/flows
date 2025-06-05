@@ -314,7 +314,7 @@ IMPORTANT: Follow the workflow instructions above. This is your primary directiv
 }
 
 function generateStageTools(callId: string): any[] {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://8119-2400-adc3-11b-2700-41f9-2041-a37d-5859.ngrok-free.app';
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://62be-2400-adc3-11b-2700-2818-6b4-f640-d87d.ngrok-free.app';
   
   return [
     {

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CalService } from '../../../../lib/cal-service';
 import { FlowData, FlowNode } from '../../../../types';
+import { getFlowData } from '../../flow/shared-flow-data';
 
 export async function POST(request: NextRequest) {
   try {
-    const { name, email, startDateTime, duration = 60, nodeId } = await request.json();
+    const { name, email, startDateTime, duration = 60, nodeId, callId } = await request.json();
 
-    console.log('📅 Book appointment request:', { name, email, startDateTime, duration, nodeId });
+    console.log('📅 Book appointment request:', { name, email, startDateTime, duration, nodeId, callId });
 
     // Validate required parameters
     if (!name || !email || !startDateTime || !nodeId) {
@@ -26,8 +27,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Get node configuration from the stored flow data
-    // In production, implement proper database storage and retrieval
-    const flowData = getStoredFlowData();
+    // Try to get call ID from multiple sources
+    const effectiveCallId = callId || 
+                           request.headers.get('x-call-id') || 
+                           request.headers.get('call-id') ||
+                           request.headers.get('ultravox-call-id');
+    
+    console.log('🔍 Attempting to find flow data with call ID:', effectiveCallId);
+    
+    const flowData = getStoredFlowData(effectiveCallId);
     
     if (!flowData) {
       return NextResponse.json(
@@ -183,16 +191,35 @@ export async function POST(request: NextRequest) {
 }
 
 // Helper function to get stored flow data
-// In a real implementation, this would fetch from your database
-function getStoredFlowData(): FlowData | null {
+// Uses the shared flow data storage system
+function getStoredFlowData(preferredCallId?: string): FlowData | null {
   try {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('conversation-flow');
-      return saved ? JSON.parse(saved) : null;
+    // If we have a specific call ID, try that first
+    if (preferredCallId) {
+      console.log('🔍 Trying preferred call ID:', preferredCallId);
+      const flowData = getFlowData(preferredCallId);
+      if (flowData) {
+        console.log('✅ Found flow data for preferred call ID:', preferredCallId);
+        return flowData;
+      }
     }
     
-    // For server-side, you'd implement proper database access
-    // For now, return null and rely on mock data
+    // Fallback: Try common patterns for demo/testing
+    const fallbackPatterns = [
+      'dentist-demo-123', 
+      'test-call-123', 
+      'call-1234567890'
+    ];
+    
+    for (const callId of fallbackPatterns) {
+      const flowData = getFlowData(callId);
+      if (flowData) {
+        console.log('✅ Found flow data for fallback call ID:', callId);
+        return flowData;
+      }
+    }
+    
+    console.log('❌ No flow data found for any call IDs');
     return null;
   } catch (error) {
     console.error('Error retrieving flow data:', error);

@@ -48,11 +48,16 @@ export class CalService {
     }
 
     try {
+      // Convert date strings to ISO format for Cal.com v2 API
+      const startISO = new Date(startDate).toISOString();
+      const endISO = new Date(endDate + 'T23:59:59').toISOString();
+
       const response = await fetch(
-        `https://api.cal.com/v1/availability?apiKey=${this.config.apiKey}&eventTypeId=${this.config.eventTypeId}&dateFrom=${startDate}&dateTo=${endDate}&timeZone=${this.config.timezone}`,
+        `https://api.cal.com/v2/slots/available?eventTypeId=${this.config.eventTypeId}&startTime=${startISO}&endTime=${endISO}`,
         {
           method: 'GET',
           headers: {
+            'Authorization': `Bearer ${this.config.apiKey}`,
             'Content-Type': 'application/json',
           },
         }
@@ -60,14 +65,14 @@ export class CalService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.message || response.statusText;
+        const errorMessage = errorData.message || errorData.error?.message || response.statusText;
         throw new Error(`Cal.com API error: ${response.status} - ${errorMessage}`);
       }
 
       const data = await response.json();
       
-      // Transform Cal.com response to our format
-      return this.transformAvailabilityData(data);
+      // Transform Cal.com v2 response to our format
+      return this.transformV2AvailabilityData(data);
     } catch (error) {
       console.error('Error checking availability:', error);
       if (error instanceof Error) {
@@ -88,22 +93,21 @@ export class CalService {
 
     try {
       const response = await fetch(
-        `https://api.cal.com/v1/bookings?apiKey=${this.config.apiKey}`,
+        `https://api.cal.com/v2/bookings`,
         {
           method: 'POST',
           headers: {
+            'Authorization': `Bearer ${this.config.apiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             eventTypeId: parseInt(this.config.eventTypeId),
             start: bookingData.start,
             end: bookingData.end,
-            responses: {
+            attendee: {
               name: bookingData.name,
               email: bookingData.email,
             },
-            timeZone: this.config.timezone,
-            language: 'en',
             metadata: bookingData.metadata || {},
           }),
         }
@@ -154,7 +158,45 @@ export class CalService {
   }
 
   /**
-   * Transform Cal.com availability response to our format
+   * Transform Cal.com v2 availability response to our format
+   */
+  private transformV2AvailabilityData(data: any): AvailabilitySlot[] {
+    const slots: AvailabilitySlot[] = [];
+    
+    if (data.data && data.data.slots) {
+      // Process v2 API slots format: { "2025-06-06": [{ "time": "2025-06-06T04:00:00.000Z" }] }
+      for (const [date, daySlots] of Object.entries(data.data.slots)) {
+        if (Array.isArray(daySlots)) {
+          for (const slot of daySlots) {
+            if (slot.time) {
+              const slotDate = new Date(slot.time);
+              slots.push({
+                time: slotDate.toLocaleTimeString('en-US', { 
+                  hour: 'numeric', 
+                  minute: '2-digit',
+                  hour12: true,
+                  timeZone: this.config.timezone 
+                }),
+                date: slotDate.toLocaleDateString('en-US', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric',
+                  timeZone: this.config.timezone 
+                }),
+                available: true,
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    return slots;
+  }
+
+  /**
+   * Transform Cal.com availability response to our format (legacy v1 format)
    */
   private transformAvailabilityData(data: any): AvailabilitySlot[] {
     const slots: AvailabilitySlot[] = [];
