@@ -409,11 +409,15 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 Cal.com API Key
               </label>
               <input
+                key={`cal-api-key-${selectedNode.id}`}
                 type="password"
                 value={selectedNode.data.calApiKey || ''}
                 onChange={(e) => onNodeUpdate(selectedNode.id, { calApiKey: e.target.value })}
                 placeholder="Enter Cal.com API key..."
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+                autoComplete="new-password"
+                spellCheck="false"
+                style={{ color: '#111827' }}
               />
             </div>
 
@@ -422,11 +426,13 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 Event Type ID
               </label>
               <input
+                key={`cal-event-type-${selectedNode.id}`}
                 type="text"
                 value={selectedNode.data.calEventTypeId || ''}
                 onChange={(e) => onNodeUpdate(selectedNode.id, { calEventTypeId: e.target.value })}
                 placeholder="Enter Event Type ID..."
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+                style={{ color: '#111827' }}
               />
             </div>
 

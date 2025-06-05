@@ -59,6 +59,15 @@ const CalNode: React.FC<CalNodeProps> = ({ id, data, selected, type }) => {
   const onNodeUpdate = data.onNodeUpdate;
   const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Sync local state with incoming data prop changes
+  useEffect(() => {
+    setNodeTitle(data.nodeTitle || config.title);
+    setApiKey(data.calApiKey || '');
+    setEventTypeId(data.calEventTypeId || '');
+    setTimezone(data.calTimezone || 'America/Los_Angeles');
+    setDescription(data.description || config.description);
+  }, [data.nodeTitle, data.calApiKey, data.calEventTypeId, data.calTimezone, data.description, config.title, config.description]);
+
   // Auto-save with debounce
   useEffect(() => {
     if (autoSaveTimeoutRef.current) {

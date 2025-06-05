@@ -389,12 +389,19 @@ const FlowBuilder: React.FC = () => {
               customPrompt: updatedNode.data.customPrompt
             }
           });
+          
+          // CRITICAL FIX: Update selectedNode if it's the same node being updated
+          if (selectedNode && selectedNode.id === nodeId) {
+            console.log('🎯 Updating selectedNode to reflect data changes');
+            setSelectedNode(updatedNode as FlowNode);
+          }
+          
           return updatedNode;
         }
         return node;
       })
     );
-  }, [setNodes]);
+  }, [setNodes, selectedNode]);
 
   // Define onDrop AFTER onNodeUpdate to avoid linter error
   const onDrop = useCallback(
