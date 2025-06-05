@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Workflow } from 'lucide-react';
+import { Play, MessageSquare, HelpCircle, GitBranch, Workflow, Calendar, CalendarCheck } from 'lucide-react';
 import { NodeType } from '../types';
 
 interface NodeSidebarProps {
@@ -21,6 +21,20 @@ const NodeSidebar: React.FC<NodeSidebarProps> = ({ onDragStart }) => {
       icon: Workflow,
       color: 'text-indigo-600',
       description: 'Node with transition management'
+    },
+    {
+      type: 'cal_check_availability' as NodeType,
+      label: 'Check Calendar Availability',
+      icon: CalendarCheck,
+      color: 'text-blue-600',
+      description: 'Check calendar availability using Cal.com'
+    },
+    {
+      type: 'cal_book_appointment' as NodeType,
+      label: 'Book Appointment',
+      icon: Calendar,
+      color: 'text-green-600',
+      description: 'Book appointment using Cal.com'
     },
     // {
     //   type: 'conversation' as NodeType,

@@ -26,6 +26,7 @@ import QuestionNode from './nodes/QuestionNode';
 import ConditionNode from './nodes/ConditionNode';
 import WorkflowNode from './nodes/WorkflowNode';
 import ConversationNode from './nodes/ConversationNode';
+import CalNode from './nodes/CalNode';
 import { FlowNode, FlowData, NodeType, NodeData, CallStatus } from '../types';
 import { useFlowContext, useCallStages } from '../lib/flow-context';
 
@@ -42,6 +43,8 @@ const nodeTypes: NodeTypes = {
   logic_split: ConversationNode,
   sms: ConversationNode,
   ending: ConversationNode,
+  cal_check_availability: CalNode,
+  cal_book_appointment: CalNode,
 };
 
 const initialNodes: Node[] = [];
@@ -243,6 +246,36 @@ const FlowBuilder: React.FC = () => {
         return { 
           content: 'End the conversation gracefully',
           nodeTitle: 'Ending'
+        };
+      case 'cal_check_availability':
+        return {
+          nodeTitle: 'Check Calendar Availability',
+          content: 'When users ask for availability, check the calendar and provide available slots.',
+          description: 'Check available time slots using Cal.com',
+          calFunctionType: 'check_availability' as const,
+          calTimezone: 'America/Los_Angeles',
+          transitions: [
+            {
+              id: `transition-availability-${Date.now()}`,
+              label: 'Show availability',
+              triggerType: 'user_response'
+            }
+          ]
+        };
+      case 'cal_book_appointment':
+        return {
+          nodeTitle: 'Book Appointment',
+          content: 'When users ask to book an appointment, book it on the calendar.',
+          description: 'Book appointment using Cal.com',
+          calFunctionType: 'book_appointment' as const,
+          calTimezone: 'America/Los_Angeles',
+          transitions: [
+            {
+              id: `transition-booking-${Date.now()}`,
+              label: 'Book appointment',
+              triggerType: 'user_response'
+            }
+          ]
         };
       // Keep legacy support for existing node types
       case 'start':

@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'message' | 'question' | 'condition' | 'workflow' | 'conversation' | 'function' | 'call_transfer' | 'press_digit' | 'logic_split' | 'sms' | 'ending';
+export type NodeType = 'start' | 'message' | 'question' | 'condition' | 'workflow' | 'conversation' | 'function' | 'call_transfer' | 'press_digit' | 'logic_split' | 'sms' | 'ending' | 'cal_check_availability' | 'cal_book_appointment';
 
 export interface FlowNode {
   id: string;
@@ -19,6 +19,11 @@ export interface NodeData {
   transitions?: NodeTransition[];
   description?: string;
   onNodeUpdate?: (nodeId: string, data: Partial<NodeData>) => void;
+  // Cal.com integration properties
+  calApiKey?: string;
+  calEventTypeId?: string;
+  calTimezone?: string;
+  calFunctionType?: 'check_availability' | 'book_appointment';
 }
 
 export interface NodeTransition {

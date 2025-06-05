@@ -564,6 +564,45 @@ You have access to a 'changeStage' tool that will automatically determine the ne
 
 Use the transitions available in this workflow to guide the conversation appropriately.`;
 
+      case 'cal_check_availability':
+        return `${basePrompt}
+
+CALENDAR AVAILABILITY CHECK:
+${node.data?.content || 'Check calendar availability and provide available time slots to the user.'}
+
+You have access to a 'checkCalendarAvailability' tool to check available time slots. When users ask about availability:
+1. Ask for their preferred date or date range if not provided
+2. Use the checkCalendarAvailability tool with the startDate parameter (and optionally endDate)
+3. Present the available time slots to the user in a friendly format
+4. After showing availability, use the 'changeStage' tool to continue the conversation flow
+
+Cal.com Configuration:
+- API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
+- Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
+- Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
+
+Always ask for confirmation before proceeding to booking.`;
+
+      case 'cal_book_appointment':
+        return `${basePrompt}
+
+APPOINTMENT BOOKING:
+${node.data?.content || 'Book appointments for users using the calendar integration.'}
+
+You have access to a 'bookAppointment' tool to book appointments. When users want to book:
+1. Collect required information: name, email, preferred date/time
+2. Confirm the details with the user
+3. Use the bookAppointment tool with the collected information
+4. Provide confirmation details to the user
+5. Use the 'changeStage' tool to continue the conversation flow
+
+Cal.com Configuration:
+- API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
+- Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
+- Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
+
+Always confirm booking details before making the appointment and provide clear confirmation after booking.`;
+
       default:
         return `${basePrompt}
 
@@ -654,6 +693,109 @@ The tool will automatically determine the next node.`;
           ],
           http: {
             baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/flow/evaluate-condition`,
+            httpMethod: 'POST'
+          }
+        }
+      });
+    }
+
+    // Add Cal.com tools for calendar nodes
+    if (node.type === 'cal_check_availability') {
+      tools.push({
+        temporaryTool: {
+          modelToolName: 'checkCalendarAvailability',
+          description: 'Check available time slots in the calendar using Cal.com',
+          dynamicParameters: [
+            {
+              name: 'startDate',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'Start date for availability check (YYYY-MM-DD format)'
+              },
+              required: true
+            },
+            {
+              name: 'endDate',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'End date for availability check (YYYY-MM-DD format)'
+              },
+              required: false
+            },
+            {
+              name: 'nodeId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The current node ID'
+              },
+              required: true
+            }
+          ],
+          http: {
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/cal/check-availability`,
+            httpMethod: 'POST'
+          }
+        }
+      });
+    }
+
+    if (node.type === 'cal_book_appointment') {
+      tools.push({
+        temporaryTool: {
+          modelToolName: 'bookAppointment',
+          description: 'Book an appointment using Cal.com',
+          dynamicParameters: [
+            {
+              name: 'name',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The name of the person booking the appointment'
+              },
+              required: true
+            },
+            {
+              name: 'email',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The email address of the person booking the appointment'
+              },
+              required: true
+            },
+            {
+              name: 'startDateTime',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The start date and time for the appointment (ISO 8601 format)'
+              },
+              required: true
+            },
+            {
+              name: 'duration',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'number',
+                description: 'Duration of the appointment in minutes'
+              },
+              required: false
+            },
+            {
+              name: 'nodeId',
+              location: 'PARAMETER_LOCATION_BODY',
+              schema: {
+                type: 'string',
+                description: 'The current node ID'
+              },
+              required: true
+            }
+          ],
+          http: {
+            baseUrlPattern: `${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/cal/book-appointment`,
             httpMethod: 'POST'
           }
         }

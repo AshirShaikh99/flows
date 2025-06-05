@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
       systemPrompt: generateStagePrompt(targetNode, userResponse),
       voice: 'Mark',
       temperature: 0.4,
-      selectedTools: generateStageTools(),
+              selectedTools: generateStageTools(targetNode),
       metadata: {
         nodeId: targetNode.id,
         nodeType: targetNode.type,
@@ -442,6 +442,16 @@ function determineNextNode(flowData: FlowData, currentNodeId: string, userRespon
       console.log('⚙️ Processing workflow node, moving to next step');
       return outgoingEdges[0]?.target || null;
 
+    case 'cal_check_availability':
+      // For calendar availability check nodes, proceed to next step after showing availability
+      console.log('📅 Processing calendar availability check node');
+      return outgoingEdges[0]?.target || null;
+
+    case 'cal_book_appointment':
+      // For appointment booking nodes, proceed to next step after booking
+      console.log('📅 Processing appointment booking node');
+      return outgoingEdges[0]?.target || null;
+
     default:
       // For other node types, use first edge
       console.log('🔄 Generic node transition');
@@ -521,6 +531,45 @@ ${node.data?.content || node.data?.label || 'Process this workflow step.'}
 Use the 'changeStage' tool when ready to continue to the next step.`;
       }
 
+    case 'cal_check_availability':
+      return `${basePrompt}
+
+CALENDAR AVAILABILITY CHECK:
+${node.data?.content || 'Check calendar availability and provide available time slots to the user.'}
+
+You have access to a 'checkCalendarAvailability' tool to check available time slots. When users ask about availability:
+1. Ask for their preferred date or date range if not provided
+2. Use the checkCalendarAvailability tool with the startDate parameter (and optionally endDate)
+3. Present the available time slots to the user in a friendly format
+4. After showing availability, use the 'changeStage' tool to continue the conversation flow
+
+Cal.com Configuration:
+- API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
+- Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
+- Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
+
+Always ask for confirmation before proceeding to booking.`;
+
+    case 'cal_book_appointment':
+      return `${basePrompt}
+
+APPOINTMENT BOOKING:
+${node.data?.content || 'Book appointments for users using the calendar integration.'}
+
+You have access to a 'bookAppointment' tool to book appointments. When users want to book:
+1. Collect required information: name, email, preferred date/time
+2. Confirm the details with the user
+3. Use the bookAppointment tool with the collected information
+4. Provide confirmation details to the user
+5. Use the 'changeStage' tool to continue the conversation flow
+
+Cal.com Configuration:
+- API Key: ${node.data?.calApiKey ? 'Configured' : 'NOT SET'}
+- Event Type ID: ${node.data?.calEventTypeId || 'NOT SET'}
+- Timezone: ${node.data?.calTimezone || 'America/Los_Angeles'}
+
+Always confirm booking details before making the appointment and provide clear confirmation after booking.`;
+
     default:
       return `${basePrompt}
 
@@ -528,10 +577,10 @@ Process this ${node.type} node and use the 'changeStage' tool to continue the co
   }
 }
 
-function generateStageTools(): ToolConfig[] {
+function generateStageTools(node?: FlowNode): ToolConfig[] {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
   
-  return [
+  const tools: ToolConfig[] = [
     {
       temporaryTool: {
         modelToolName: 'changeStage',
@@ -572,6 +621,111 @@ function generateStageTools(): ToolConfig[] {
       }
     }
   ];
+
+  // Add Cal.com tools based on node type
+  if (node?.type === 'cal_check_availability') {
+    tools.push({
+      temporaryTool: {
+        modelToolName: 'checkCalendarAvailability',
+        description: 'Check available time slots in the calendar using Cal.com',
+        dynamicParameters: [
+          {
+            name: 'startDate',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'Start date for availability check (YYYY-MM-DD format)'
+            },
+            required: true
+          },
+          {
+            name: 'endDate',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'End date for availability check (YYYY-MM-DD format)'
+            },
+            required: false
+          },
+          {
+            name: 'nodeId',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The current node ID'
+            },
+            required: true
+          }
+        ],
+        http: {
+          baseUrlPattern: `${baseUrl}/api/cal/check-availability`,
+          httpMethod: 'POST'
+        }
+      }
+    });
+  }
+
+  if (node?.type === 'cal_book_appointment') {
+    tools.push({
+      temporaryTool: {
+        modelToolName: 'bookAppointment',
+        description: 'Book an appointment using Cal.com',
+        dynamicParameters: [
+          {
+            name: 'name',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The name of the person booking the appointment'
+            },
+            required: true
+          },
+          {
+            name: 'email',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The email address of the person booking the appointment'
+            },
+            required: true
+          },
+          {
+            name: 'startDateTime',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The start date and time for the appointment (ISO 8601 format)'
+            },
+            required: true
+          },
+          {
+            name: 'duration',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'Duration of the appointment in minutes'
+            },
+            required: false
+          },
+          {
+            name: 'nodeId',
+            location: 'PARAMETER_LOCATION_BODY',
+            schema: {
+              type: 'string',
+              description: 'The current node ID'
+            },
+            required: true
+          }
+        ],
+        http: {
+          baseUrlPattern: `${baseUrl}/api/cal/book-appointment`,
+          httpMethod: 'POST'
+        }
+      }
+    });
+  }
+
+  return tools;
 }
 
 function generateTransitionMessage(fromNode: FlowNode, toNode: FlowNode, userResponse?: string): string {

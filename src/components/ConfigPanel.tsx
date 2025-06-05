@@ -124,6 +124,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
       case 'logic_split': return 'Logic Split Node';
       case 'sms': return 'SMS Node';
       case 'ending': return 'Ending Node';
+      case 'cal_check_availability': return 'Check Calendar Availability';
+      case 'cal_book_appointment': return 'Book Appointment';
       default: return 'Node';
     }
   };
@@ -382,6 +384,136 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="Enter comparison value..."
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm text-gray-900"
               />
+            </div>
+          </div>
+        )}
+
+        {(selectedNode.type === 'cal_check_availability' || selectedNode.type === 'cal_book_appointment') && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Node Title
+              </label>
+              <input
+                type="text"
+                value={nodeTitle}
+                onChange={(e) => setNodeTitle(e.target.value)}
+                onBlur={handleSave}
+                placeholder="Enter node title..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cal.com API Key
+              </label>
+              <input
+                type="password"
+                value={selectedNode.data.calApiKey || ''}
+                onChange={(e) => onNodeUpdate(selectedNode.id, { calApiKey: e.target.value })}
+                placeholder="Enter Cal.com API key..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Event Type ID
+              </label>
+              <input
+                type="text"
+                value={selectedNode.data.calEventTypeId || ''}
+                onChange={(e) => onNodeUpdate(selectedNode.id, { calEventTypeId: e.target.value })}
+                placeholder="Enter Event Type ID..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Timezone
+              </label>
+              <select
+                value={selectedNode.data.calTimezone || 'America/Los_Angeles'}
+                onChange={(e) => onNodeUpdate(selectedNode.id, { calTimezone: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+              >
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="America/Chicago">America/Chicago</option>
+                <option value="America/Denver">America/Denver</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="Europe/Paris">Europe/Paris</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={selectedNode.data.description || ''}
+                onChange={(e) => onNodeUpdate(selectedNode.id, { description: e.target.value })}
+                placeholder="Enter description..."
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm text-gray-900"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  <ArrowRight className="w-4 h-4 inline mr-1" />
+                  Transitions
+                </label>
+                <button
+                  onClick={addTransition}
+                  className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {transitions.map((transition) => (
+                  <div key={transition.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded border">
+                    <input
+                      type="text"
+                      value={transition.label}
+                      onChange={(e) => updateTransition(transition.id, { label: e.target.value })}
+                      onBlur={handleSave}
+                      placeholder="Transition label..."
+                      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+                    />
+                    <select
+                      value={transition.triggerType}
+                      onChange={(e) => updateTransition(transition.id, { triggerType: e.target.value as 'user_response' | 'condition_met' | 'timeout' | 'manual' })}
+                      onBlur={handleSave}
+                      className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm text-gray-900"
+                    >
+                      <option value="user_response">User Response</option>
+                      <option value="condition_met">Condition Met</option>
+                      <option value="timeout">Timeout</option>
+                      <option value="manual">Manual</option>
+                    </select>
+                    <button
+                      onClick={() => removeTransition(transition.id)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              
+              {transitions.length === 0 && (
+                <div className="text-sm text-gray-500 italic p-2 bg-gray-50 rounded">
+                  No transitions configured. Add transitions to define how the conversation flows from this node.
+                </div>
+              )}
             </div>
           </div>
         )}
