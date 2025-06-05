@@ -56,6 +56,17 @@ export interface FlowData {
   nodes: FlowNode[];
   edges: FlowEdge[];
   globalPrompt?: string;
+  ultravoxSettings?: UltravoxSettings;
+}
+
+export interface UltravoxSettings {
+  voice: string;
+  model: string;
+  temperature: number;
+  languageHint: string;
+  recordingEnabled: boolean;
+  maxDuration: string;
+  firstSpeaker: string;
 }
 
 // UltraVox Integration Types

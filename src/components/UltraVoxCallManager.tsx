@@ -4,20 +4,23 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, MapPin } from 'lucide-react';
 import { FlowData, CallStatus } from '../types';
 import { getUltraVoxService } from '../lib/ultravox';
+import { useFlowContext } from '../lib/flow-context';
 
 interface UltraVoxCallManagerProps {
-  flowData: FlowData;
   apiKey: string;
   onCallStatusChange?: (status: CallStatus) => void;
   onStageChange?: (nodeId: string) => void;
 }
 
 export default function UltraVoxCallManager({ 
-  flowData, 
   apiKey, 
   onCallStatusChange,
   onStageChange 
 }: UltraVoxCallManagerProps) {
+  // Get flow data from context to ensure we always have the latest data
+  const { state } = useFlowContext();
+  const flowData = state.flowData;
+
   const [isCallActive, setIsCallActive] = useState(false);
   const [callStatus, setCallStatus] = useState<CallStatus>('STATUS_UNSPECIFIED');
   const [isMicMuted, setIsMicMuted] = useState(false);
@@ -136,6 +139,8 @@ export default function UltraVoxCallManager({
       console.log('🔍 FLOW DATA DEBUG:', {
         nodeCount: flowData.nodes.length,
         edgeCount: flowData.edges.length,
+        ultravoxSettings: flowData.ultravoxSettings || 'No settings - using defaults',
+        globalPrompt: flowData.globalPrompt || 'No global prompt',
         nodes: flowData.nodes.map(n => ({
           id: n.id,
           type: n.type,
@@ -146,6 +151,21 @@ export default function UltraVoxCallManager({
           nodeTitle: n.data.nodeTitle
         }))
       });
+
+      // Log current ultravoxSettings specifically
+      if (flowData.ultravoxSettings) {
+        console.log('🎙️ ULTRAVOX SETTINGS IN USE:', {
+          voice: flowData.ultravoxSettings.voice,
+          model: flowData.ultravoxSettings.model,
+          temperature: flowData.ultravoxSettings.temperature,
+          languageHint: flowData.ultravoxSettings.languageHint,
+          recordingEnabled: flowData.ultravoxSettings.recordingEnabled,
+          maxDuration: flowData.ultravoxSettings.maxDuration,
+          firstSpeaker: flowData.ultravoxSettings.firstSpeaker
+        });
+      } else {
+        console.log('⚠️ NO ULTRAVOX SETTINGS FOUND - Using defaults');
+      }
       
       // Find start node
       const startNode = flowData.nodes.find(n => n.type === 'start');
@@ -296,6 +316,35 @@ export default function UltraVoxCallManager({
             {getStatusText(callStatus)}
           </span>
         </div>
+      </div>
+
+      {/* UltraVox Settings Preview */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <h4 className="text-sm font-medium text-blue-900 mb-2">🎙️ Call Settings</h4>
+        {flowData.ultravoxSettings ? (
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="text-blue-700">
+              <span className="font-medium">Voice:</span> {flowData.ultravoxSettings.voice}
+            </div>
+            <div className="text-blue-700">
+              <span className="font-medium">Model:</span> {flowData.ultravoxSettings.model.replace('fixie-ai/', '')}
+            </div>
+            <div className="text-blue-700">
+              <span className="font-medium">Temperature:</span> {flowData.ultravoxSettings.temperature}
+            </div>
+            <div className="text-blue-700">
+              <span className="font-medium">Language:</span> {flowData.ultravoxSettings.languageHint}
+            </div>
+            <div className="text-blue-700">
+              <span className="font-medium">First Speaker:</span> {flowData.ultravoxSettings.firstSpeaker === 'FIRST_SPEAKER_AGENT' ? 'Agent' : 'User'}
+            </div>
+            <div className="text-blue-700">
+              <span className="font-medium">Recording:</span> {flowData.ultravoxSettings.recordingEnabled ? 'On' : 'Off'}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-blue-600">Using default settings (change in Global Settings)</p>
+        )}
       </div>
 
       {/* Current Stage Indicator */}

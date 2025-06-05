@@ -25,6 +25,7 @@ type FlowAction =
   | { type: 'SET_CURRENT_STAGES'; payload: UltraVoxCallStage[] }
   | { type: 'UPDATE_VARIABLES'; payload: Record<string, unknown> }
   | { type: 'SET_GLOBAL_PROMPT'; payload: string }
+  | { type: 'SET_ULTRAVOX_SETTINGS'; payload: import('../types').UltravoxSettings }
   | { type: 'RESET_FLOW_STATE' };
 
 // Initial State
@@ -92,6 +93,15 @@ function flowReducer(state: FlowState, action: FlowAction): FlowState {
         },
       };
     
+    case 'SET_ULTRAVOX_SETTINGS':
+      return {
+        ...state,
+        flowData: {
+          ...state.flowData,
+          ultravoxSettings: action.payload,
+        },
+      };
+    
     case 'RESET_FLOW_STATE':
       return {
         ...initialState,
@@ -111,6 +121,7 @@ interface FlowContextType {
   // Helper functions
   setFlowData: (flowData: FlowData) => void;
   setGlobalPrompt: (prompt: string) => void;
+  setUltravoxSettings: (settings: import('../types').UltravoxSettings) => void;
   transitionToStage: (stageId: string) => void;
   setCallStatus: (status: CallStatus) => void;
   setCallActive: (active: boolean) => void;
@@ -150,6 +161,10 @@ export function FlowProvider({ children }: FlowProviderProps) {
 
   const setGlobalPrompt = useCallback((prompt: string) => {
     dispatch({ type: 'SET_GLOBAL_PROMPT', payload: prompt });
+  }, []);
+
+  const setUltravoxSettings = useCallback((settings: import('../types').UltravoxSettings) => {
+    dispatch({ type: 'SET_ULTRAVOX_SETTINGS', payload: settings });
   }, []);
 
   const transitionToStage = useCallback((stageId: string) => {
@@ -210,6 +225,7 @@ export function FlowProvider({ children }: FlowProviderProps) {
     dispatch,
     setFlowData,
     setGlobalPrompt,
+    setUltravoxSettings,
     transitionToStage,
     setCallStatus,
     setCallActive,

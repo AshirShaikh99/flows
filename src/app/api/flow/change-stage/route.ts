@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate new stage configuration
-    const stageConfig = generateUltravoxStageConfig(nextNode, userResponse, callId);
+    const stageConfig = generateUltravoxStageConfig(nextNode, userResponse, callId, flowData);
     
     console.log('✅ Generated new stage config:', {
       from: currentNodeId,
@@ -255,13 +255,27 @@ function isResponseMatch(userResponse: string, transitionLabel: string): boolean
   return false;
 }
 
-function generateUltravoxStageConfig(node: any, userResponse: string, callId: string): UltravoxStageConfig {
-  const baseConfig: UltravoxStageConfig = {
-    systemPrompt: generateSystemPrompt(node, userResponse, callId),
-    model: 'fixie-ai/ultravox-70B',
+function generateUltravoxStageConfig(node: any, userResponse: string, callId: string, flowData: any): UltravoxStageConfig {
+  // Get global Ultravox settings or use defaults
+  const defaultSettings = {
     voice: 'Mark',
+    model: 'fixie-ai/ultravox',
     temperature: 0.4,
     languageHint: 'en',
+    recordingEnabled: true,
+    maxDuration: '1800s',
+    firstSpeaker: 'FIRST_SPEAKER_AGENT'
+  };
+  
+  const ultravoxSettings = flowData.ultravoxSettings || defaultSettings;
+  console.log('⚙️ Using stage Ultravox settings:', ultravoxSettings);
+
+  const baseConfig: UltravoxStageConfig = {
+    systemPrompt: generateSystemPrompt(node, userResponse, callId),
+    model: ultravoxSettings.model,
+    voice: ultravoxSettings.voice,
+    temperature: ultravoxSettings.temperature,
+    languageHint: ultravoxSettings.languageHint,
     selectedTools: generateStageTools(callId),
     toolResultText: `Successfully transitioned to ${node.data?.nodeTitle || node.type} stage.`
   };

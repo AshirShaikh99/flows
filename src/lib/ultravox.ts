@@ -70,6 +70,20 @@ export class UltraVoxFlowService {
   async createCall(flowData: FlowData, startNodeId?: string): Promise<UltraVoxCall> {
     console.log('🔄 Starting UltraVox call creation with Call Stages...');
     
+    // Get global Ultravox settings or use defaults
+    const defaultSettings = {
+      voice: 'Mark',
+      model: 'fixie-ai/ultravox',
+      temperature: 0.4,
+      languageHint: 'en',
+      recordingEnabled: true,
+      maxDuration: '1800s',
+      firstSpeaker: 'FIRST_SPEAKER_AGENT'
+    };
+    
+    const ultravoxSettings = flowData.ultravoxSettings || defaultSettings;
+    console.log('⚙️ Using Ultravox settings:', ultravoxSettings);
+    
     // Validate that BASE_URL is HTTPS (required by UltraVox)
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
     if (!baseUrl.startsWith('https://')) {
@@ -136,16 +150,17 @@ export class UltraVoxFlowService {
     const systemPrompt = this.generateSystemPromptForNode(initialNode);
     const selectedTools = this.generateToolsForNode(initialNode);
     
-    // Create call config with Call Stages support
+    // Create call config with Call Stages support using global settings
     const callConfig = {
       systemPrompt: systemPrompt,
-      model: 'fixie-ai/ultravox-70B',
-      voice: 'Mark',
-      temperature: 0.4,
-      firstSpeaker: 'FIRST_SPEAKER_AGENT',
+      model: ultravoxSettings.model,
+      voice: ultravoxSettings.voice,
+      temperature: ultravoxSettings.temperature,
+      languageHint: ultravoxSettings.languageHint,
+      firstSpeaker: ultravoxSettings.firstSpeaker,
       initialOutputMedium: 'MESSAGE_MEDIUM_VOICE',
-      maxDuration: '1800s',
-      recordingEnabled: true,
+      maxDuration: ultravoxSettings.maxDuration,
+      recordingEnabled: ultravoxSettings.recordingEnabled,
       selectedTools: selectedTools,
       metadata: {
         flowId: `flow_${Date.now()}`,

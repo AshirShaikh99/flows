@@ -15,7 +15,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-import { Save, Download, Trash2, RotateCcw } from 'lucide-react';
+import { Save, Download, Trash2, RotateCcw, Settings } from 'lucide-react';
 import NodeSidebar from './NodeSidebar';
 import ConfigPanel from './ConfigPanel';
 import GlobalSettingsPanel from './GlobalSettingsPanel';
@@ -91,9 +91,10 @@ const FlowBuilder: React.FC = () => {
       nodes: nodes as FlowNode[],
       edges: edges,
       globalPrompt: state.flowData.globalPrompt,
+      ultravoxSettings: state.flowData.ultravoxSettings,
     };
     setFlowData(flowData);
-  }, [nodes, edges, state.flowData.globalPrompt, setFlowData]);
+  }, [nodes, edges, state.flowData.globalPrompt, state.flowData.ultravoxSettings, setFlowData]);
 
   // Update node styles based on current stage
   useEffect(() => {
@@ -328,7 +329,6 @@ const FlowBuilder: React.FC = () => {
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
     setShowConfigPanel(false);
-    setShowGlobalSettings(true);
   }, []);
 
   const onNodeUpdate = useCallback((nodeId: string, data: Partial<NodeData>) => {
@@ -427,16 +427,18 @@ const FlowBuilder: React.FC = () => {
       nodes: nodes as FlowNode[],
       edges: edges,
       globalPrompt: state.flowData.globalPrompt,
+      ultravoxSettings: state.flowData.ultravoxSettings,
     };
     localStorage.setItem('conversation-flow', JSON.stringify(flowData));
     showToastMessage('Flow saved successfully!');
-  }, [nodes, edges, state.flowData.globalPrompt, showToastMessage]);
+  }, [nodes, edges, state.flowData.globalPrompt, state.flowData.ultravoxSettings, showToastMessage]);
 
   const exportFlow = useCallback(() => {
     const flowData = {
       nodes: nodes as FlowNode[],
       edges,
       globalPrompt: state.flowData.globalPrompt,
+      ultravoxSettings: state.flowData.ultravoxSettings,
     };
     const dataStr = JSON.stringify(flowData, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
@@ -446,7 +448,7 @@ const FlowBuilder: React.FC = () => {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
-  }, [nodes, edges, state.flowData.globalPrompt]);
+  }, [nodes, edges, state.flowData.globalPrompt, state.flowData.ultravoxSettings]);
 
   const clearFlow = useCallback(() => {
     if (confirm('Are you sure you want to clear the entire flow? This action cannot be undone.')) {
@@ -481,6 +483,8 @@ const FlowBuilder: React.FC = () => {
       const flowData: FlowData = {
         nodes: nodes as FlowNode[],
         edges: edges,
+        globalPrompt: state.flowData.globalPrompt,
+        ultravoxSettings: state.flowData.ultravoxSettings,
       };
       
       // Register with both placeholder and any active call IDs
@@ -509,7 +513,7 @@ const FlowBuilder: React.FC = () => {
       
       registerFlowForCall();
     }
-  }, [setCallStatus, setCallActive, nodes, edges, showToastMessage]);
+  }, [setCallStatus, setCallActive, nodes, edges, state.flowData.globalPrompt, state.flowData.ultravoxSettings, showToastMessage]);
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -534,6 +538,15 @@ const FlowBuilder: React.FC = () => {
           >
             <Download className="w-4 h-4" />
             Export
+          </button>
+          
+          <button
+            onClick={() => setShowGlobalSettings(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-white text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all duration-200 shadow-sm hover:shadow-md"
+            title="Global Settings"
+          >
+            <Settings className="w-4 h-4" />
+            Settings
           </button>
           
           <button
@@ -650,7 +663,6 @@ const FlowBuilder: React.FC = () => {
         <div className="absolute top-20 right-4 z-20 w-96">
           {isApiKeyConfigured ? (
             <UltraVoxCallManager
-              flowData={{ nodes: nodes as FlowNode[], edges }}
               apiKey={ultravoxApiKey}
               onCallStatusChange={handleCallStatusChange}
               onStageChange={handleStageChange}
